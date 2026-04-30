@@ -1,11 +1,22 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import Sidebar from './Sidebar';
+import RulesModal from '../common/RulesModal';
+import GlobalBannedScreen from '../common/GlobalBannedScreen';
 import styles from './AppLayout.module.css';
 
 const AppLayout = () => {
+  const { currentUser } = useAuth();
+
+  if (currentUser?.profile?.isBanned) {
+    return <GlobalBannedScreen />;
+  }
+
   return (
     <div className={styles.appContainer}>
+      <RulesModal />
+      
       {/* Mobile Top App Bar */}
       <div className={styles.mobileTopBar}>
         <div className={styles.brandName}>BLINK</div>
@@ -28,3 +39,4 @@ const AppLayout = () => {
 };
 
 export default AppLayout;
+

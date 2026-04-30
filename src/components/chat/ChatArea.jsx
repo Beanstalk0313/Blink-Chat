@@ -16,6 +16,7 @@ import {
 import { uploadFile } from '../../services/upload';
 import UserAvatar from '../common/UserAvatar';
 import Modal from '../common/Modal';
+import CommunityBannedScreen from '../common/CommunityBannedScreen';
 import { useCall } from '../../contexts/CallContext';
 import styles from './ChatArea.module.css';
 
@@ -185,6 +186,13 @@ const ChatAreaContent = () => {
 
   if (!community && !loading) {
     return <div className={styles.loadingContainer}><p>Community not found.</p></div>;
+  }
+
+  if (community?.bannedUsers && community.bannedUsers[currentUser?.uid]) {
+    const expiration = community.bannedUsers[currentUser.uid];
+    if (expiration === -1 || expiration > Date.now()) {
+      return <CommunityBannedScreen expirationTime={expiration} />;
+    }
   }
 
   return (

@@ -1,0 +1,39 @@
+.bannedContainer {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  padding: 2rem;
+}
+
+.bannedCard {
+  background: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 4rem;
+  border-radius: var(--radius-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 600px;
+  box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.1);
+}
+
+.backBtn {
+  margin-top: 3rem;
+  padding: 1rem 2rem;
+  background: var(--color-primary);
+  border: none;
+  color: white;
+  border-radius: var(--radius-full);
+  font: var(--font-label-md);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.backBtn:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+}

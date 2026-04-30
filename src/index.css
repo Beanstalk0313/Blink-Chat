@@ -93,6 +93,12 @@ body {
   display: flex;
 }
 
+.app-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
 /* Base Utility Classes */
 .glass-panel {
   background-color: rgba(31, 31, 33, 0.6);

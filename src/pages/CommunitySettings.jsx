@@ -37,9 +37,9 @@ export default function CommunitySettings() {
   const [editingChannel, setEditingChannel] = useState(null);
   const [editChannelName, setEditChannelName] = useState('');
 
-  // Modal states
   const [modalType, setModalType] = useState(null); // 'kick', 'ban', 'deleteChannel'
   const [selectedTarget, setSelectedTarget] = useState(null);
+  const [banDuration, setBanDuration] = useState('-1');
 
   useEffect(() => {
     async function loadData() {
@@ -131,6 +131,18 @@ export default function CommunitySettings() {
       await kickUser(communityId, selectedTarget);
       setMembers(members.filter(m => m.uid !== selectedTarget));
       setModalType(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const confirmBan = async () => {
+    try {
+      const duration = parseInt(banDuration, 10);
+      await banUser(communityId, selectedTarget, duration);
+      setMembers(members.filter(m => m.uid !== selectedTarget));
+      setModalType(null);
+      setBanDuration('-1');
     } catch (err) {
       console.error(err);
     }
@@ -353,6 +365,42 @@ export default function CommunitySettings() {
         )}
       >
         <p className="text-body-md">This will permanently remove the channel and all its messages. This action cannot be undone.</p>
+      </Modal>
+
+      <Modal 
+        isOpen={modalType === 'ban'} 
+        onClose={() => setModalType(null)}
+        title="Ban Member"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
+            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={confirmBan}>Ban User</button>
+          </>
+        )}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <p className="text-body-md">Are you sure you want to ban this member? They will lose access to this community.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <label className="text-label-sm">BAN DURATION</label>
+            <select 
+              value={banDuration} 
+              onChange={(e) => setBanDuration(e.target.value)}
+              style={{
+                padding: '0.75rem',
+                background: 'rgba(255,255,255,0.05)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 'var(--radius-md)'
+              }}
+            >
+              <option value="-1">Permanent</option>
+              <option value="60">1 Hour</option>
+              <option value="1440">24 Hours</option>
+              <option value="10080">7 Days</option>
+              <option value="43200">30 Days</option>
+            </select>
+          </div>
+        </div>
       </Modal>
 
       <Modal 

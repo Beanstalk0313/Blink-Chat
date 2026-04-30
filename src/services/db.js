@@ -110,12 +110,36 @@ export async function kickUser(communityId, uid) {
   }
 }
 
-export async function banUser(communityId, uid) {
+export async function banUser(communityId, uid, durationMinutes = -1) {
   await kickUser(communityId, uid);
   const commRef = doc(firestore, 'communities', communityId);
+  
+  const expirationTime = durationMinutes === -1 ? -1 : Date.now() + (durationMinutes * 60000);
+  
   await updateDoc(commRef, {
-    bannedUsers: arrayUnion(uid)
+    [`bannedUsers.${uid}`]: expirationTime
   });
+
+  // Sync with RTDB to prevent sending messages
+  const rtdbBanRef = ref(db, `community_bans/${communityId}/${uid}`);
+  await set(rtdbBanRef, true);
+}
+
+export async function unbanUser(communityId, uid) {
+  const commRef = doc(firestore, 'communities', communityId);
+  const commSnap = await getDoc(commRef);
+  if (commSnap.exists()) {
+    const data = commSnap.data();
+    if (data.bannedUsers && data.bannedUsers[uid]) {
+      const updatedBans = { ...data.bannedUsers };
+      delete updatedBans[uid];
+      await updateDoc(commRef, { bannedUsers: updatedBans });
+    }
+  }
+
+  // Remove from RTDB
+  const rtdbBanRef = ref(db, `community_bans/${communityId}/${uid}`);
+  await set(rtdbBanRef, null);
 }
 
 // Pinned Communities

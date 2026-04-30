@@ -34,6 +34,8 @@ export function AuthProvider({ children }) {
       aboutMe: '',
       avatarBase64: '',
       joinedCommunities: [],
+      isBanned: false,
+      hasAcceptedRules: false,
       createdAt: new Date().toISOString()
     });
 
@@ -61,23 +63,52 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    let profileUnsubscribe = null;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+        profileUnsubscribe = null;
+      }
+
       if (user) {
-        // Fetch additional user data from firestore
         const docRef = doc(firestore, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setCurrentUser({ ...user, profile: docSnap.data() });
-        } else {
-          setCurrentUser(user);
-        }
+        // Real-time listener for profile changes (including bans)
+        import('firebase/firestore').then(({ onSnapshot }) => {
+          profileUnsubscribe = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+              setCurrentUser({ ...user, profile: docSnap.data() });
+            } else {
+              // Fallback if doc doesn't exist yet (e.g. during registration)
+              setCurrentUser({ ...user, profile: {} });
+            }
+          }, (err) => {
+            console.warn("Profile fetch failed (check security rules):", err);
+            // Still set the user so the app doesn't hang, but without profile data
+            setCurrentUser(user);
+          });
+        });
       } else {
         setCurrentUser(null);
       }
       setLoading(false);
     });
 
-    return unsubscribe;
+    // Zero-Trust: Force token refresh every 60 seconds
+    const interval = setInterval(() => {
+      if (auth.currentUser) {
+        auth.currentUser.getIdToken(true).catch(() => {
+          // If token refresh fails (user disabled/deleted), log them out
+          signOut(auth);
+        });
+      }
+    }, 60000);
+
+    return () => {
+      unsubscribe();
+      if (profileUnsubscribe) profileUnsubscribe();
+      clearInterval(interval);
+    };
   }, []);
 
   const value = {
