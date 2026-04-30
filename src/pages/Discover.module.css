@@ -1,0 +1,87 @@
+.discoverContainer {
+  padding: 3rem;
+  height: 100%;
+  overflow-y: auto;
+  color: var(--color-on-background);
+}
+
+.header {
+  margin-bottom: 3rem;
+  text-align: center;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+.card {
+  background-color: rgba(31, 31, 33, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  background-color: rgba(42, 42, 44, 0.6);
+  border-color: rgba(173, 198, 255, 0.2);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 0 30px rgba(173, 198, 255, 0.1);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.icon, .iconPlaceholder {
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-DEFAULT);
+  object-fit: cover;
+}
+
+.iconPlaceholder {
+  background-color: var(--color-surface-variant);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-tertiary);
+}
+
+.description {
+  flex: 1;
+  color: var(--color-on-surface-variant);
+}
+
+.joinBtn {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: var(--radius-full);
+  background-color: rgba(173, 198, 255, 0.1);
+  color: var(--color-primary);
+  border: 1px solid rgba(173, 198, 255, 0.2);
+  font: var(--font-label-md);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.joinBtn:hover {
+  background-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.loading, .emptyState {
+  text-align: center;
+  color: var(--color-tertiary);
+  padding: 3rem;
+  font: var(--font-body-lg);
+}
