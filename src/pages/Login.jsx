@@ -38,7 +38,7 @@ export default function Login() {
       <div className={styles.card}>
         <div className={styles.header}>
           <div className={styles.brandIcon}>
-            <span className="material-symbols-outlined text-primary" style={{ fontSize: '32px' }}>bubble_chart</span>
+            <img src="/logo.svg" alt="Blink Logo" style={{ width: '48px', height: '48px' }} />
           </div>
           <h2 className="text-headline-md">{isLogin ? 'Welcome Back' : 'Join Blink'}</h2>
           <p className="text-body-md text-tertiary">

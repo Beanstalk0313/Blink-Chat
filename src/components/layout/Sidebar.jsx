@@ -46,6 +46,12 @@ const Sidebar = () => {
   return (
     <nav className={styles.sidebar}>
       <div className={styles.topSection}>
+        {/* Logo / Brand */}
+        <Link to="/" className={styles.navItem} style={{ marginBottom: '0.5rem' }}>
+          <img src="/logo.svg" alt="Blink Logo" style={{ width: '32px', height: '32px' }} />
+          <span className={styles.tooltip}>Blink Chat</span>
+        </Link>
+
         {/* User Profile / Account */}
         <Link to="/profile" className={styles.profileWrapper}>
           <UserAvatar user={currentUser?.profile} size="3rem" />
