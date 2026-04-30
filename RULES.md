@@ -20,7 +20,7 @@ service cloud.firestore {
     // We use exists() to avoid errors if the user doc hasn't been created yet
     function isNotBanned() {
       let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isSignedIn() && (!exists(userPath) || get(userPath).data.isBanned != true);
+      return isSignedIn() && (!exists(userPath) || get(userPath).data.get('isBanned', false) != true);
     }
 
     // Users Collection
@@ -30,7 +30,7 @@ service cloud.firestore {
       
       allow create: if isSignedIn() && request.auth.uid == userId;
       allow update: if isSignedIn() && request.auth.uid == userId && 
-                   (!request.resource.data.keys().hasAny(['isBanned']));
+                   (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isBanned']));
       
       match /lastRead/{channelId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
