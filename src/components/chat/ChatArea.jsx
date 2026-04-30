@@ -209,7 +209,13 @@ const ChatAreaContent = () => {
           </div>
           <button 
             className={`${styles.pinBtn} ${(currentUser?.profile?.pinnedCommunities || []).includes(communityId) ? styles.pinned : ''}`}
-            onClick={() => togglePinCommunity(currentUser.uid, communityId)}
+            onClick={async () => {
+              try {
+                await togglePinCommunity(currentUser.uid, communityId);
+              } catch (err) {
+                alert(err.message);
+              }
+            }}
             style={{ opacity: 1 }}
             title="Pin Community"
           >

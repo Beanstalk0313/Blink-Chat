@@ -147,8 +147,8 @@ export async function togglePinCommunity(uid, communityId) {
   const userRef = doc(firestore, 'users', uid);
   const userSnap = await getDoc(userRef);
   if (userSnap.exists()) {
-    const profile = userSnap.data().profile || {};
-    const pinned = profile.pinnedCommunities || [];
+    const data = userSnap.data();
+    const pinned = data.pinnedCommunities || [];
     const isPinned = pinned.includes(communityId);
     
     if (!isPinned && pinned.length >= 5) {
@@ -156,7 +156,7 @@ export async function togglePinCommunity(uid, communityId) {
     }
 
     await updateDoc(userRef, {
-      'profile.pinnedCommunities': isPinned 
+      pinnedCommunities: isPinned 
         ? pinned.filter(id => id !== communityId) 
         : arrayUnion(communityId)
     });

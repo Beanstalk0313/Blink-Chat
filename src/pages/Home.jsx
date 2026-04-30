@@ -1,23 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getUnreadCounts } from '../services/db';
+import { getUnreadCounts, getCommunity } from '../services/db';
 import styles from './Home.module.css';
 import { Link } from 'react-router-dom';
 
 export default function Home() {
   const { currentUser } = useAuth();
   const [unreadData, setUnreadData] = useState({});
+  const [joinedCommunities, setJoinedCommunities] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchUnreads() {
+    async function fetchData() {
       if (currentUser?.profile?.joinedCommunities) {
-        const data = await getUnreadCounts(currentUser.uid, currentUser.profile.joinedCommunities);
-        setUnreadData(data);
+        // Fetch unreads
+        const uData = await getUnreadCounts(currentUser.uid, currentUser.profile.joinedCommunities);
+        setUnreadData(uData);
+
+        // Fetch community details
+        const cData = await Promise.all(
+          currentUser.profile.joinedCommunities.map(id => getCommunity(id))
+        );
+        setJoinedCommunities(cData.filter(c => c !== null));
       }
       setLoading(false);
     }
-    fetchUnreads();
+    fetchData();
   }, [currentUser]);
 
   return (
@@ -70,21 +78,30 @@ export default function Home() {
         </section>
 
         <section className={styles.section}>
-          <h2 className="text-headline-md">Quick Actions</h2>
-          <div className={styles.actionsGrid}>
-            <Link to="/create-community" className={styles.actionCard}>
-              <span className="material-symbols-outlined">add_circle</span>
-              <span>Create Community</span>
-            </Link>
-            <Link to="/discover" className={styles.actionCard}>
-              <span className="material-symbols-outlined">explore</span>
-              <span>Find Communities</span>
-            </Link>
-            <Link to="/settings" className={styles.actionCard}>
-              <span className="material-symbols-outlined">settings</span>
-              <span>Settings</span>
-            </Link>
-          </div>
+          <h2 className="text-headline-md">My Communities</h2>
+          {loading ? (
+            <p>Loading communities...</p>
+          ) : joinedCommunities.length > 0 ? (
+            <div className={styles.communitiesGrid}>
+              {joinedCommunities.map(comm => (
+                <Link to={`/channels/${comm.id}`} key={comm.id} className={styles.communityCard}>
+                  <div className={styles.commIconWrapper}>
+                    {comm.iconBase64 ? (
+                      <img src={comm.iconBase64} alt={comm.name} />
+                    ) : (
+                      <div className={styles.commIconPlaceholder}>{comm.name.charAt(0).toUpperCase()}</div>
+                    )}
+                  </div>
+                  <span className="text-label-md">{comm.name}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              <p>You haven't joined any communities yet.</p>
+              <Link to="/discover" className={styles.discoverBtn}>Explore Communities</Link>
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -34,6 +34,7 @@ export function AuthProvider({ children }) {
       aboutMe: '',
       avatarBase64: '',
       joinedCommunities: [],
+      pinnedCommunities: [],
       isBanned: false,
       hasAcceptedRules: false,
       createdAt: new Date().toISOString()
@@ -82,16 +83,18 @@ export function AuthProvider({ children }) {
               // Fallback if doc doesn't exist yet (e.g. during registration)
               setCurrentUser({ ...user, profile: {} });
             }
+            setLoading(false);
           }, (err) => {
             console.warn("Profile fetch failed (check security rules):", err);
             // Still set the user so the app doesn't hang, but without profile data
             setCurrentUser(user);
+            setLoading(false);
           });
         });
       } else {
         setCurrentUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     // Zero-Trust: Force token refresh every 60 seconds
