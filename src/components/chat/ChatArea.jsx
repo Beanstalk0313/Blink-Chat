@@ -11,7 +11,9 @@ import {
   togglePinCommunity,
   getCommunityMembers,
   createChannel,
-  togglePinMessage
+  togglePinMessage,
+  deleteMessage,
+  editMessage
 } from '../../services/db';
 import { uploadFile } from '../../services/upload';
 import UserAvatar from '../common/UserAvatar';
@@ -60,8 +62,12 @@ const ChatAreaContent = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [community, setCommunity] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [messageLimit, setMessageLimit] = useState(25);
+  const [hasMore, setHasMore] = useState(true);
   const messagesEndRef = useRef(null);
   const prevMessagesLength = useRef(0);
+  const isInitialLoad = useRef(true);
+  const shouldScrollToBottom = useRef(true);
 
   // UI States
   const [isMemberListOpen, setIsMemberListOpen] = useState(false);
@@ -71,6 +77,22 @@ const ChatAreaContent = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [members, setMembers] = useState([]);
   const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024); // Start closed on mobile
+
+  useEffect(() => {
+    // Handle resizing - close sidebar if window becomes small
+    const handleResize = () => {
+      if (window.innerWidth <= 1024) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     async function loadCommunityData() {
@@ -97,6 +119,10 @@ const ChatAreaContent = () => {
       }
     }
     loadCommunityData();
+    // Reset limit and initial load flag when changing channels
+    setMessageLimit(25);
+    isInitialLoad.current = true;
+    shouldScrollToBottom.current = true;
   }, [communityId, channelId, navigate]);
 
   useEffect(() => {
@@ -105,23 +131,36 @@ const ChatAreaContent = () => {
         const sortedMsgs = Array.isArray(msgs) ? msgs : [];
         
         // Handle notifications
-        if (sortedMsgs.length > prevMessagesLength.current) {
+        if (!isInitialLoad.current && sortedMsgs.length > prevMessagesLength.current) {
           const latestMsg = sortedMsgs[sortedMsgs.length - 1];
           if (latestMsg.authorUid !== currentUser.uid && !isMuted) {
             notify(`#${currentChannel?.name || 'chat'}`, latestMsg.text || 'Sent a file');
           }
         }
-        prevMessagesLength.current = sortedMsgs.length;
+
+        // Determine if we should scroll to bottom
+        // Scroll if initial load OR if user was already at bottom OR if it's their own message
+        const lastMsg = sortedMsgs[sortedMsgs.length - 1];
+        if (isInitialLoad.current || (lastMsg && lastMsg.authorUid === currentUser.uid)) {
+          shouldScrollToBottom.current = true;
+        }
 
         setMessages(sortedMsgs);
+        setHasMore(sortedMsgs.length >= messageLimit);
+        prevMessagesLength.current = sortedMsgs.length;
+        isInitialLoad.current = false;
+        
         updateLastRead(currentUser.uid, channelId).catch(() => {});
-      });
+      }, messageLimit);
       return () => unsubscribe();
     }
-  }, [channelId, currentUser?.uid, isMuted]);
+  }, [channelId, currentUser?.uid, isMuted, messageLimit]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (shouldScrollToBottom.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: isInitialLoad.current ? "auto" : "smooth" });
+      shouldScrollToBottom.current = false;
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -136,6 +175,7 @@ const ChatAreaContent = () => {
     if (!channelId || !currentUser?.uid) return;
     
     try {
+      shouldScrollToBottom.current = true;
       await sendMessage(channelId, newMessage, currentUser.uid);
       setNewMessage('');
     } catch (err) {
@@ -151,11 +191,39 @@ const ChatAreaContent = () => {
     setIsUploading(true);
     try {
       const uploadResult = await uploadFile(file);
+      shouldScrollToBottom.current = true;
       await sendMessage(channelId, `[File Uploaded: ${file.name}]`, currentUser.uid, uploadResult.url, file.name);
     } catch (err) {
       console.error(err);
     }
     setIsUploading(false);
+  };
+
+  const handleLoadMore = () => {
+    shouldScrollToBottom.current = false;
+    setMessageLimit(prev => prev + 25);
+  };
+
+  const handleDeleteMessage = async (msgId) => {
+    if (window.confirm("Are you sure you want to delete this message?")) {
+      try {
+        await deleteMessage(channelId, msgId);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const handleEditMessage = async (e) => {
+    e.preventDefault();
+    if (!editingText.trim() || !editingMessageId) return;
+    try {
+      await editMessage(channelId, editingMessageId, editingText);
+      setEditingMessageId(null);
+      setEditingText('');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleCreateChannel = async (e) => {
@@ -197,7 +265,12 @@ const ChatAreaContent = () => {
 
   return (
     <div className={styles.chatLayout}>
-      <div className={styles.innerSidebar}>
+      {/* Mobile Backdrop */}
+      {isSidebarOpen && window.innerWidth <= 1024 && (
+        <div className={styles.sidebarBackdrop} onClick={() => setIsSidebarOpen(false)} />
+      )}
+      
+      <div className={`${styles.innerSidebar} ${!isSidebarOpen ? styles.closed : ''}`}>
         <div className={styles.sidebarHeader}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <h2 className="text-headline-md" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -221,18 +294,6 @@ const ChatAreaContent = () => {
           >
             <span className="material-symbols-outlined">push_pin</span>
           </button>
-          <button 
-            className={styles.pinBtn}
-            onClick={() => {
-              const url = `http://blink.chats.cf/join/${communityId}`;
-              navigator.clipboard.writeText(url);
-              alert('Community link copied to clipboard!');
-            }}
-            style={{ opacity: 1 }}
-            title="Copy Community Link"
-          >
-            <span className="material-symbols-outlined">share</span>
-          </button>
         </div>
 
         <div className={styles.channelList}>
@@ -250,6 +311,7 @@ const ChatAreaContent = () => {
                 key={channel.id}
                 to={`/channels/${communityId}/${channel.id}`} 
                 className={`${styles.channelItem} ${channelId === channel.id ? styles.active : ''}`}
+                onClick={() => window.innerWidth < 768 && setIsSidebarOpen(false)}
               >
                 <span className="material-symbols-outlined" style={{ fontVariationSettings: channelId === channel.id ? "'FILL' 1" : "'FILL' 0" }}>tag</span>
                 <span className="text-label-md">{channel.name}</span>
@@ -276,6 +338,9 @@ const ChatAreaContent = () => {
       <div className={styles.chatCanvas}>
         <header className={styles.chatHeader}>
           <div className={styles.headerTitle}>
+            <button className={styles.menuToggle} onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+              <span className="material-symbols-outlined">menu</span>
+            </button>
             <span className="material-symbols-outlined text-tertiary">tag</span>
             <div>
               <h1 className="text-headline-md">{currentChannel?.name || 'loading...'}</h1>
@@ -330,12 +395,19 @@ const ChatAreaContent = () => {
         <div className={styles.chatContainer}>
           <div className={styles.messagesContainer}>
             <div className={styles.messageList}>
+              {hasMore && (
+                <button className={styles.loadMoreBtn} onClick={handleLoadMore}>
+                  Load Older Messages
+                </button>
+              )}
+              
               {(messages || []).map((msg) => {
                 if (!msg) return null;
                 const isMe = msg.authorUid === currentUser?.uid;
                 const author = members.find(m => m.uid === msg.authorUid) || { displayName: msg.authorName || 'User', avatarBase64: msg.authorAvatar };
                 const date = msg.timestamp ? new Date(msg.timestamp) : new Date();
                 const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const isEditing = editingMessageId === msg.id;
                 
                 return (
                   <div key={msg.id} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received}`}>
@@ -350,29 +422,70 @@ const ChatAreaContent = () => {
                         <span className="text-label-sm text-tertiary" style={{ opacity: 0.7 }}>
                           {timeStr}
                         </span>
-                        {isAdmin && (
-                          <button 
-                            className={`${styles.msgPinBtn} ${msg.isPinned ? styles.active : ''}`}
-                            onClick={() => togglePinMessage(channelId, msg.id, msg.isPinned)}
-                            title={msg.isPinned ? "Unpin Message" : "Pin Message"}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>push_pin</span>
-                          </button>
-                        )}
-                      </div>
-                      {msg.text && <div className={styles.messageBubble}>{msg.text}</div>}
-                      {msg.fileUrl && (
-                        <div className={styles.fileMessage}>
-                          <div className={styles.fileCard}>
-                            <span className="material-symbols-outlined">description</span>
-                            <div className={styles.fileInfo}>
-                              <p className="text-label-md">{msg.fileName || 'file'}</p>
-                              <a href={msg.fileUrl} target="_blank" rel="noreferrer" className={styles.downloadBtn}>
-                                <span className="material-symbols-outlined">download</span>
-                              </a>
-                            </div>
-                          </div>
+                        <div className={styles.messageActions}>
+                          {isMe && (
+                            <button 
+                              className={styles.msgActionBtn}
+                              onClick={() => {
+                                setEditingMessageId(msg.id);
+                                setEditingText(msg.text);
+                              }}
+                              title="Edit Message"
+                            >
+                              <span className="material-symbols-outlined">edit</span>
+                            </button>
+                          )}
+                          {(isMe || isAdmin) && (
+                            <button 
+                              className={styles.msgActionBtn}
+                              onClick={() => handleDeleteMessage(msg.id)}
+                              title="Delete Message"
+                            >
+                              <span className="material-symbols-outlined">delete</span>
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button 
+                              className={`${styles.msgPinBtn} ${msg.isPinned ? styles.active : ''}`}
+                              onClick={() => togglePinMessage(channelId, msg.id, msg.isPinned)}
+                              title={msg.isPinned ? "Unpin Message" : "Pin Message"}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>push_pin</span>
+                            </button>
+                          )}
                         </div>
+                      </div>
+                      {isEditing ? (
+                        <form onSubmit={handleEditMessage} className={styles.editForm}>
+                          <input 
+                            type="text" 
+                            value={editingText}
+                            onChange={(e) => setEditingText(e.target.value)}
+                            className={styles.editInput}
+                            autoFocus
+                          />
+                          <div className={styles.editActions}>
+                            <button type="button" onClick={() => setEditingMessageId(null)}>Cancel</button>
+                            <button type="submit">Save</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          {msg.text && <div className={styles.messageBubble}>{msg.text}</div>}
+                          {msg.fileUrl && (
+                            <div className={styles.fileMessage}>
+                              <div className={styles.fileCard}>
+                                <span className="material-symbols-outlined">description</span>
+                                <div className={styles.fileInfo}>
+                                  <p className="text-label-md">{msg.fileName || 'file'}</p>
+                                  <a href={msg.fileUrl} target="_blank" rel="noreferrer" className={styles.downloadBtn}>
+                                    <span className="material-symbols-outlined">download</span>
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

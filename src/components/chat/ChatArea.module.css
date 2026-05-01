@@ -1,3 +1,20 @@
+.sidebarBackdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 90;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 .chatLayout {
   display: flex;
   height: 100%;
@@ -721,6 +738,149 @@
   color: var(--color-tertiary);
   margin-top: 0.75rem;
   opacity: 0.6;
+}
+
+.loadMoreBtn {
+  margin: 0.5rem auto;
+  padding: 0.5rem 1rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-full);
+  color: var(--color-tertiary);
+  cursor: pointer;
+  font: var(--font-label-md);
+  transition: all 0.3s;
+}
+
+.loadMoreBtn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.messageActions {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.messageItem:hover .messageActions {
+  opacity: 1;
+}
+
+.msgActionBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-tertiary);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.msgActionBtn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.editForm {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.editInput {
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  padding: 0.75rem;
+  color: white;
+  width: 100%;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.editActions button {
+  padding: 0.25rem 0.75rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.editActions button[type="submit"] {
+  background-color: var(--color-primary);
+  border: none;
+  color: white;
+}
+
+.editActions button[type="button"] {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--color-tertiary);
+}
+
+.menuToggle {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .menuToggle {
+    display: flex;
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+  }
+
+  .innerSidebar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 15rem;
+    max-width: 80vw;
+    background-color: #111112;
+    z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.5);
+    border-radius: 0 1rem 1rem 0;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .innerSidebar.closed {
+    transform: translateX(-100%);
+  }
+
+  .chatHeader {
+    padding: 0 1rem;
+    height: 4.5rem;
+  }
+
+  .headerActions {
+    gap: 0.5rem;
+  }
+
+  .messageContent {
+    max-width: 90%;
+  }
+
+  .messageItem {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .headerActions .iconBtn:nth-child(n+3) {
+    display: none;
+  }
 }
 
 .avatar {

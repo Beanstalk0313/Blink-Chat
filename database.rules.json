@@ -5,6 +5,7 @@
     
     "messages": {
       "$channelId": {
+        ".indexOn": ["timestamp"],
         ".read": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
         ".write": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
         "$messageId": {

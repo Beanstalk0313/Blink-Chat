@@ -47,7 +47,10 @@ export function AuthProvider({ children }) {
   }
 
   function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+    return signInWithEmailAndPassword(auth, email, password).catch(err => {
+      console.error("Firebase Login Error:", err);
+      throw err;
+    });
   }
 
   function logout() {
@@ -55,29 +58,37 @@ export function AuthProvider({ children }) {
   }
 
   async function loginWithGoogle() {
-    const provider = new GoogleAuthProvider();
-    const result = await signInWithPopup(auth, provider);
-    const user = result.user;
+    try {
+      const provider = new GoogleAuthProvider();
+      // Set custom parameters to force account selection if needed
+      provider.setCustomParameters({ prompt: 'select_account' });
+      
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
 
-    // Check if user profile exists
-    const docRef = doc(firestore, 'users', user.uid);
-    const docSnap = await getDoc(docRef);
+      // Check if user profile exists
+      const docRef = doc(firestore, 'users', user.uid);
+      const docSnap = await getDoc(docRef);
 
-    if (!docSnap.exists()) {
-      await setDoc(docRef, {
-        displayName: user.displayName,
-        email: user.email,
-        aboutMe: '',
-        avatarBase64: '',
-        joinedCommunities: [],
-        pinnedCommunities: [],
-        isBanned: false,
-        hasAcceptedRules: false,
-        hasSeenTutorial: false,
-        createdAt: new Date().toISOString()
-      });
+      if (!docSnap.exists()) {
+        await setDoc(docRef, {
+          displayName: user.displayName,
+          email: user.email,
+          aboutMe: '',
+          avatarBase64: '',
+          joinedCommunities: [],
+          pinnedCommunities: [],
+          isBanned: false,
+          hasAcceptedRules: false,
+          hasSeenTutorial: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+      return result;
+    } catch (err) {
+      console.error("Google Auth Error:", err);
+      throw err;
     }
-    return result;
   }
 
   function resetPassword(email) {
@@ -107,7 +118,11 @@ export function AuthProvider({ children }) {
         import('firebase/firestore').then(({ onSnapshot }) => {
           profileUnsubscribe = onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists()) {
-              setCurrentUser({ ...user, profile: docSnap.data() });
+              // Ensure we merge the base user object with the latest profile data
+              setCurrentUser(prevUser => {
+                const baseUser = prevUser && prevUser.uid === user.uid ? prevUser : user;
+                return { ...baseUser, profile: docSnap.data() };
+              });
             } else {
               // Fallback if doc doesn't exist yet (e.g. during registration)
               setCurrentUser({ ...user, profile: {} });

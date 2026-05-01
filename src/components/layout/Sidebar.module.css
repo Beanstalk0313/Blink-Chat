@@ -6,11 +6,11 @@
   .sidebar {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start; /* Consistent alignment to prevent jerkiness */
     justify-content: space-between;
-    padding: 2rem 0.5rem;
-    width: 5rem;
-    border-radius: var(--radius-full);
+    padding: 1.5rem 0.5rem; /* Base padding */
+    width: 4.5rem; /* Base width */
+    border-radius: var(--radius-lg);
     height: calc(100vh - 48px);
     background-color: rgba(2, 6, 23, 0.3);
     backdrop-filter: blur(40px);
@@ -19,37 +19,120 @@
     box-shadow: 0 25px 50px -12px rgba(59, 130, 246, 0.05);
     z-index: 40;
     position: relative;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  .sidebar.expanded {
+    width: 17rem;
+    padding: 1.5rem 0.75rem;
   }
 }
 
 .topSection {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--stack-md);
+  align-items: flex-start;
+  gap: 0.5rem;
   width: 100%;
 }
 
-.profileWrapper {
-  width: 2.5rem;
-  height: 2.5rem;
+.brandRow {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0.5rem;
+}
+
+.pinButton {
+  background: transparent;
+  border: none;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  padding: 0.5rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+.sidebar.expanded .pinButton {
+  opacity: 1;
+  width: 2.5rem;
+}
+
+.pinButton:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.pinButton.active {
+  color: var(--color-primary);
+}
+
+.profileWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  width: 3.5rem; /* Circular in collapsed */
+  height: 3.5rem;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
+  border-radius: var(--radius-full);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.sidebar.expanded .profileWrapper {
+  width: 100%;
 }
 
 .profileWrapper:hover {
-  transform: scale(1.1);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.navLabel {
+  font: var(--font-label-md);
+  white-space: nowrap;
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+  transition: opacity 0.2s, width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #e2e8f0;
+}
+
+.sidebar.expanded .navLabel {
+  opacity: 1;
+  width: auto;
+  margin-left: 0.25rem;
+}
+
+.sidebar.expanded .tooltip {
+  display: none;
 }
 
 .pinnedLabel {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
+  padding: 0 0.5rem;
   color: var(--color-tertiary);
   margin-top: 0.5rem;
   opacity: 0.5;
+  width: 100%;
+  min-width: 0;
+  height: 2.5rem;
 }
 
-.communityIconWrapper {
+.iconWrapper, .communityIconWrapper {
   width: 2.5rem;
   height: 2.5rem;
   border-radius: var(--radius-full);
@@ -57,14 +140,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: border-radius 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-radius 0.3s;
   background: var(--color-surface-container-high);
   border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.navItem:hover .communityIconWrapper,
-.navItem.active .communityIconWrapper {
-  border-radius: 12px;
+  flex-shrink: 0;
 }
 
 .communityIcon {
@@ -79,48 +158,57 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font: var(--font-label-md);
   color: white;
-}
-
-.divider {
-  width: 2.5rem;
-  height: 1px;
-  background-color: rgba(255, 255, 255, 0.1);
-  margin: 0.5rem 0;
+  font-weight: 600;
+  font-size: 1.1rem;
 }
 
 .navItem {
-  color: #64748b; /* text-slate-500 */
-  padding: 0.75rem;
+  color: #64748b;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 0.75rem;
   position: relative;
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   text-decoration: none;
   background: transparent;
   border: none;
+  width: 3.5rem; /* Circular highlight when collapsed */
+  height: 3.5rem;
+  border-radius: var(--radius-full);
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.5rem;
+}
+
+.sidebar.expanded .navItem {
   width: 100%;
+  padding-left: 0.5rem;
 }
 
 .navItem span.material-symbols-outlined {
-  font-size: 1.5rem;
+  font-size: 1.375rem;
   display: block;
+  flex-shrink: 0;
 }
 
-.navItem:hover, .navItem.active {
-  color: #e2e8f0; /* text-slate-200 */
-  transform: scale(1.1);
+.navItem:hover {
+  color: #e2e8f0;
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 .navItem.active {
-  background-color: #2563eb; /* bg-blue-600 */
+  background-color: #2563eb;
   box-shadow: 0 0 20px rgba(0, 122, 255, 0.4);
-  border-radius: var(--radius-full);
   color: white;
+}
+
+.navItem.active .iconWrapper,
+.navItem.active .communityIconWrapper {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .tooltip {
@@ -137,6 +225,7 @@
   transition: opacity 0.3s;
   white-space: nowrap;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 50;
 }
 
 .navItem:hover .tooltip {
@@ -146,13 +235,42 @@
 .bottomSection {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--stack-sm);
+  align-items: flex-start;
+  gap: 0.25rem;
   width: 100%;
 }
 
+.divider {
+  width: 2.5rem;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 0.5rem 0;
+  transition: width 0.3s;
+  margin-left: 0.5rem;
+}
+
+.sidebar.expanded .divider {
+  width: calc(100% - 1rem);
+}
+
 .logoutBtn {
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
+  color: #94a3b8;
+}
+
+.logoutBtn:hover {
+  color: #ef4444 !important; /* text-red-500 */
+  background-color: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-full);
+}
+
+.logoutBtn:hover .tooltip {
+  background-color: #ef4444;
+  color: white;
+}
+
+.logoutBtn {
+  margin-top: 0.25rem;
   color: #94a3b8;
 }
 

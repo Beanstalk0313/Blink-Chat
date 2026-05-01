@@ -11,11 +11,30 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, register, loginWithGoogle } = useAuth();
+  const { login, register, loginWithGoogle, resetPassword } = useAuth();
   const navigate = useNavigate();
+
+  const [resetSent, setResetSent] = useState(false);
+  const [showReset, setShowReset] = useState(false);
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    if (!email) return setError("Please enter your email first.");
+    setLoading(true);
+    setError("");
+    try {
+      await resetPassword(email);
+      setResetSent(true);
+    } catch (err) {
+      setError("Failed to send reset email: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (loading) return;
     setError('');
     setLoading(true);
 
@@ -27,22 +46,26 @@ export default function Login() {
       }
       navigate('/discover');
     } catch (err) {
+      console.error("Login attempt failed:", err);
       setError('Failed to ' + (isLogin ? 'log in' : 'create account') + '. ' + err.message);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function handleGoogleLogin() {
+    if (loading) return;
     setError('');
     setLoading(true);
     try {
       await loginWithGoogle();
       navigate('/discover');
     } catch (err) {
+      console.error("Google login attempt failed:", err);
       setError('Google login failed: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   return (
@@ -84,7 +107,17 @@ export default function Login() {
             />
           </div>
           <div className={styles.inputGroup}>
-            <label className="text-label-sm">PASSWORD</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label className="text-label-sm">PASSWORD</label>
+              {isLogin && (
+                <span 
+                  className={styles.forgotLink} 
+                  onClick={() => setShowReset(true)}
+                >
+                  Forgot?
+                </span>
+              )}
+            </div>
             <input 
               type="password" 
               value={password}
@@ -97,6 +130,36 @@ export default function Login() {
             {isLogin ? 'Log In' : 'Sign Up'}
           </button>
         </form>
+
+        {showReset && (
+          <div className={styles.resetOverlay}>
+            <div className={styles.resetModal}>
+              <h3 className="text-headline-sm">Reset Password</h3>
+              {resetSent ? (
+                <div style={{ textAlign: 'center' }}>
+                  <p className="text-body-md" style={{ margin: '1rem 0' }}>Password reset email sent! Check your inbox.</p>
+                  <button className={styles.button} onClick={() => setShowReset(false)}>Close</button>
+                </div>
+              ) : (
+                <form onSubmit={handleResetPassword}>
+                  <p className="text-body-md" style={{ margin: '1rem 0' }}>Enter your email to receive a reset link.</p>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    className={styles.input}
+                    placeholder="your@email.com"
+                  />
+                  <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>
+                    <button type="button" className={styles.cancelBtn} onClick={() => setShowReset(false)}>Cancel</button>
+                    <button type="submit" className={styles.button} disabled={loading}>Send Link</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
         <div className={styles.divider}>
           <span>OR</span>

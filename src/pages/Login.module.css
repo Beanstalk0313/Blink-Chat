@@ -167,6 +167,58 @@
   text-decoration: underline;
 }
 
+.forgotLink {
+  font: var(--font-label-sm);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: opacity 0.3s;
+}
+
+.forgotLink:hover {
+  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.resetOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1.5rem;
+}
+
+.resetModal {
+  background-color: #1e1e20;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.cancelBtn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.cancelBtn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
 .divider {
   display: flex;
   align-items: center;

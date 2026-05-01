@@ -70,6 +70,19 @@ export default function Settings() {
   };
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
+
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth <= 1024) {
+        setIsSidebarOpen(false);
+      } else {
+        setIsSidebarOpen(true);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const handleResetPassword = async () => {
     try {
@@ -91,7 +104,12 @@ export default function Settings() {
 
   return (
     <div className={styles.page}>
-      <div className={styles.sidebar}>
+      {/* Mobile Sidebar Backdrop */}
+      {isSidebarOpen && window.innerWidth <= 1024 && (
+        <div className={styles.sidebarBackdrop} onClick={() => setIsSidebarOpen(false)} />
+      )}
+
+      <div className={`${styles.sidebar} ${!isSidebarOpen ? styles.closed : ''}`}>
         <div className={styles.sidebarHeader}>
           <span className="text-label-sm text-tertiary">USER SETTINGS</span>
         </div>
@@ -102,6 +120,7 @@ export default function Settings() {
             onClick={() => {
               setActiveTab(tab.id);
               setMessage({ type: '', text: '' });
+              if (window.innerWidth <= 1024) setIsSidebarOpen(false);
             }}
           >
             <span className="material-symbols-outlined">{tab.icon}</span>
@@ -116,6 +135,13 @@ export default function Settings() {
       </div>
 
       <div className={styles.content}>
+        <header className={styles.mobileHeader}>
+          <button className={styles.menuToggle} onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+            <span className="material-symbols-outlined">menu</span>
+          </button>
+          <h2 className="text-headline-md">Settings</h2>
+        </header>
+
         <div className={styles.contentInner}>
           {message.text && (
             <div className={`${styles.alert} ${styles[message.type]}`}>

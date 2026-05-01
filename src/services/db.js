@@ -186,14 +186,29 @@ export function sendMessage(channelId, text, authorUid, fileUrl = null, fileName
   return newMessageRef;
 }
 
+export async function editMessage(channelId, messageId, newText) {
+  const messageRef = ref(db, `messages/${channelId}/${messageId}`);
+  await updateDoc(doc(firestore, 'channels', channelId), { lastActivity: Date.now() }); // Update activity
+  return set(ref(db, `messages/${channelId}/${messageId}/text`), newText);
+}
+
+export async function deleteMessage(channelId, messageId) {
+  const messageRef = ref(db, `messages/${channelId}/${messageId}`);
+  return set(messageRef, null);
+}
+
 export async function togglePinMessage(channelId, messageId, currentStatus) {
   const messageRef = ref(db, `messages/${channelId}/${messageId}`);
   await set(ref(db, `messages/${channelId}/${messageId}/isPinned`), !currentStatus);
 }
 
-export function subscribeToMessages(channelId, callback) {
+import { query as rtdbQuery, limitToLast, orderByChild } from 'firebase/database';
+
+export function subscribeToMessages(channelId, callback, limitCount = 50) {
   const messagesRef = ref(db, `messages/${channelId}`);
-  return onValue(messagesRef, (snapshot) => {
+  const q = rtdbQuery(messagesRef, orderByChild('timestamp'), limitToLast(limitCount));
+  
+  return onValue(q, (snapshot) => {
     const data = snapshot.val();
     if (data) {
       const msgs = Object.entries(data).map(([id, msg]) => ({ id, ...msg }));
