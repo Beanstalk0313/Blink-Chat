@@ -8,7 +8,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: space-between;
-    padding: 2rem 0;
+    padding: 2rem 0.5rem;
     width: 5rem;
     border-radius: var(--radius-full);
     height: calc(100vh - 48px);
@@ -31,8 +31,8 @@
 }
 
 .profileWrapper {
-  width: 3rem;
-  height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
   cursor: pointer;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
@@ -50,8 +50,8 @@
 }
 
 .communityIconWrapper {
-  width: 3rem;
-  height: 3rem;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: var(--radius-full);
   overflow: hidden;
   display: flex;
@@ -101,10 +101,14 @@
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   text-decoration: none;
+  background: transparent;
+  border: none;
+  width: 100%;
 }
 
 .navItem span.material-symbols-outlined {
   font-size: 1.5rem;
+  display: block;
 }
 
 .navItem:hover, .navItem.active {
@@ -137,4 +141,28 @@
 
 .navItem:hover .tooltip {
   opacity: 1;
+}
+
+.bottomSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--stack-sm);
+  width: 100%;
+}
+
+.logoutBtn {
+  margin-top: 0.5rem;
+  color: #94a3b8;
+}
+
+.logoutBtn:hover {
+  color: #ef4444 !important; /* text-red-500 */
+  background-color: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-full);
+}
+
+.logoutBtn:hover .tooltip {
+  background-color: #ef4444;
+  color: white;
 }

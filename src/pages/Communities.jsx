@@ -48,7 +48,22 @@ export default function Communities() {
                 <h3 className="text-headline-md">{comm.name}</h3>
                 <p className="text-body-md text-tertiary">{comm.description?.substring(0, 80)}...</p>
               </div>
-              <span className="material-symbols-outlined" style={{ color: 'var(--color-primary)' }}>arrow_forward</span>
+              <div className={styles.actions}>
+                <button 
+                  className={styles.shareBtn} 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const url = `http://blink.chats.cf/join/${comm.id}`;
+                    navigator.clipboard.writeText(url);
+                    alert('Community link copied to clipboard!');
+                  }}
+                  title="Copy Community Link"
+                >
+                  <span className="material-symbols-outlined">share</span>
+                </button>
+                <span className="material-symbols-outlined" style={{ color: 'var(--color-primary)' }}>arrow_forward</span>
+              </div>
             </Link>
           ))}
           {communities.length === 0 && (

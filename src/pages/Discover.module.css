@@ -79,9 +79,33 @@
   color: var(--color-on-primary);
 }
 
+.cardActions {
+  display: flex;
+  gap: 1rem;
+}
+
+.shareBtn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--color-tertiary);
+  cursor: pointer;
+  padding: 0.75rem;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.shareBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
 .loading, .emptyState {
   text-align: center;
   color: var(--color-tertiary);
   padding: 3rem;
   font: var(--font-body-lg);
 }
+

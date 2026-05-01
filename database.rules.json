@@ -1,0 +1,20 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    
+    "messages": {
+      "$channelId": {
+        ".read": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
+        ".write": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
+        "$messageId": {
+          ".validate": "newData.hasChildren(['authorUid', 'timestamp']) && newData.child('authorUid').val() === auth.uid",
+          "isPinned": {
+            // In a strict environment, only validate that an admin is changing this
+            ".validate": "newData.isBoolean()"
+          }
+        }
+      }
+    }
+  }
+}

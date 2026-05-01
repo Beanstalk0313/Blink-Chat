@@ -12,6 +12,7 @@ import Profile from './pages/Profile';
 import Settings from './pages/Settings';
 import CreateCommunity from './pages/CreateCommunity';
 import CommunitySettings from './pages/CommunitySettings';
+import JoinCommunity from './pages/JoinCommunity';
 import { useAuth } from './contexts/AuthContext';
 
 const ProtectedRoute = ({ children }) => {
@@ -78,5 +79,9 @@ export const router = createBrowserRouter([
         element: <CommunitySettings />,
       },
     ],
+  },
+  {
+    path: '/join/:communityId',
+    element: <JoinCommunity />,
   },
 ]);

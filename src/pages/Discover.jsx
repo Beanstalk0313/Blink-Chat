@@ -58,12 +58,25 @@ export default function Discover() {
                   </div>
                 </div>
                 <p className={`${styles.description} text-body-md`}>{comm.description}</p>
-                <button 
-                  onClick={() => hasJoined ? navigate(`/channels/${comm.id}`) : handleJoin(comm.id)}
-                  className={styles.joinBtn}
-                >
-                  {hasJoined ? 'Go to Community' : 'Join'}
-                </button>
+                <div className={styles.cardActions}>
+                  <button 
+                    onClick={() => hasJoined ? navigate(`/channels/${comm.id}`) : handleJoin(comm.id)}
+                    className={styles.joinBtn}
+                  >
+                    {hasJoined ? 'Go to Community' : 'Join'}
+                  </button>
+                  <button 
+                    className={styles.shareBtn}
+                    onClick={() => {
+                      const url = `http://blink.chats.cf/join/${comm.id}`;
+                      navigator.clipboard.writeText(url);
+                      alert('Community link copied to clipboard!');
+                    }}
+                    title="Copy Community Link"
+                  >
+                    <span className="material-symbols-outlined">share</span>
+                  </button>
+                </div>
               </div>
             );
           })}

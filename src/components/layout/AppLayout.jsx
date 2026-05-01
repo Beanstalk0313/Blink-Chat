@@ -1,8 +1,9 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import Sidebar from './Sidebar';
 import RulesModal from '../common/RulesModal';
+import Tutorial from '../common/Tutorial';
 import GlobalBannedScreen from '../common/GlobalBannedScreen';
 import styles from './AppLayout.module.css';
 
@@ -16,13 +17,18 @@ const AppLayout = () => {
   return (
     <div className={styles.appContainer}>
       <RulesModal />
+      <Tutorial />
       
       {/* Mobile Top App Bar */}
       <div className={styles.mobileTopBar}>
         <div className={styles.brandName}>BLINK</div>
         <div className={styles.topBarActions}>
-          <span className="material-symbols-outlined">notifications</span>
-          <span className="material-symbols-outlined">account_circle</span>
+          <Link to="/activity">
+            <span className="material-symbols-outlined">notifications</span>
+          </Link>
+          <Link to="/profile">
+            <span className="material-symbols-outlined">account_circle</span>
+          </Link>
         </div>
       </div>
 

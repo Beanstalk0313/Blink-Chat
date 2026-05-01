@@ -11,6 +11,7 @@ import {
   kickUser,
   banUser
 } from '../services/db';
+import { useAuth } from '../contexts/AuthContext';
 import { compressAndConvert } from '../services/utils';
 import UserAvatar from '../components/common/UserAvatar';
 import Modal from '../components/common/Modal';
@@ -19,6 +20,7 @@ import styles from './CommunitySettings.module.css';
 export default function CommunitySettings() {
   const { communityId } = useParams();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState('general');
   const [community, setCommunity] = useState(null);
   const [channels, setChannels] = useState([]);
@@ -28,6 +30,7 @@ export default function CommunitySettings() {
 
   // Form states
   const [name, setName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [description, setDescription] = useState('');
   const [iconBase64, setIconBase64] = useState('');
   const [zoom, setZoom] = useState(1);
@@ -49,6 +52,7 @@ export default function CommunitySettings() {
         setName(comm.name);
         setDescription(comm.description);
         setIconBase64(comm.iconBase64 || '');
+        setInviteCode(comm.inviteCode || '');
       }
       
       const chans = await getChannels(communityId);
@@ -83,7 +87,11 @@ export default function CommunitySettings() {
     e.preventDefault();
     setSaving(true);
     try {
-      await updateCommunity(communityId, { name, description, iconBase64 });
+      const updateData = { name, description, iconBase64 };
+      if (currentUser.uid === community.adminUid && community.isPrivate) {
+        updateData.inviteCode = inviteCode;
+      }
+      await updateCommunity(communityId, updateData);
       setModalType('success');
     } catch (err) {
       console.error(err);
@@ -229,6 +237,30 @@ export default function CommunitySettings() {
                 <label className="text-label-md">DESCRIPTION</label>
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
               </div>
+
+              {currentUser?.uid === community?.adminUid && community?.isPrivate && (
+                <div className={styles.inputGroup}>
+                  <label className="text-label-md">INVITE CODE</label>
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <input 
+                      type="text" 
+                      value={inviteCode} 
+                      onChange={e => setInviteCode(e.target.value.toUpperCase())} 
+                      placeholder="e.g. BLINK123"
+                    />
+                    <button 
+                      type="button" 
+                      className={styles.secondaryBtn}
+                      onClick={() => setInviteCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
+                    >
+                      Regenerate
+                    </button>
+                  </div>
+                  <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>
+                    This code is required for users to join your private community.
+                  </p>
+                </div>
+              )}
 
               <button type="submit" className={styles.saveBtn} disabled={saving}>
                 {saving ? 'Saving...' : 'Save Changes'}

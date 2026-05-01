@@ -7,7 +7,9 @@ import {
   updateProfile,
   updateEmail as firebaseUpdateEmail,
   updatePassword as firebaseUpdatePassword,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { auth } from '../firebase/firebase';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
@@ -37,6 +39,7 @@ export function AuthProvider({ children }) {
       pinnedCommunities: [],
       isBanned: false,
       hasAcceptedRules: false,
+      hasSeenTutorial: false,
       createdAt: new Date().toISOString()
     });
 
@@ -49,6 +52,32 @@ export function AuthProvider({ children }) {
 
   function logout() {
     return signOut(auth);
+  }
+
+  async function loginWithGoogle() {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    const user = result.user;
+
+    // Check if user profile exists
+    const docRef = doc(firestore, 'users', user.uid);
+    const docSnap = await getDoc(docRef);
+
+    if (!docSnap.exists()) {
+      await setDoc(docRef, {
+        displayName: user.displayName,
+        email: user.email,
+        aboutMe: '',
+        avatarBase64: '',
+        joinedCommunities: [],
+        pinnedCommunities: [],
+        isBanned: false,
+        hasAcceptedRules: false,
+        hasSeenTutorial: false,
+        createdAt: new Date().toISOString()
+      });
+    }
+    return result;
   }
 
   function resetPassword(email) {
@@ -119,6 +148,7 @@ export function AuthProvider({ children }) {
     login,
     register,
     logout,
+    loginWithGoogle,
     resetPassword,
     updateEmail,
     updatePassword

@@ -23,5 +23,10 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
-
-Design Prototype/
+.agents/
+.claude/
+.firebase/
+.github/
+.qwen/
+.trae/
+.vibe/

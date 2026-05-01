@@ -221,6 +221,18 @@ const ChatAreaContent = () => {
           >
             <span className="material-symbols-outlined">push_pin</span>
           </button>
+          <button 
+            className={styles.pinBtn}
+            onClick={() => {
+              const url = `http://blink.chats.cf/join/${communityId}`;
+              navigator.clipboard.writeText(url);
+              alert('Community link copied to clipboard!');
+            }}
+            style={{ opacity: 1 }}
+            title="Copy Community Link"
+          >
+            <span className="material-symbols-outlined">share</span>
+          </button>
         </div>
 
         <div className={styles.channelList}>

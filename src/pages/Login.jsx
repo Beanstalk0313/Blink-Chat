@@ -11,7 +11,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e) {
@@ -30,6 +30,18 @@ export default function Login() {
       setError('Failed to ' + (isLogin ? 'log in' : 'create account') + '. ' + err.message);
     }
 
+    setLoading(false);
+  }
+
+  async function handleGoogleLogin() {
+    setError('');
+    setLoading(true);
+    try {
+      await loginWithGoogle();
+      navigate('/discover');
+    } catch (err) {
+      setError('Google login failed: ' + err.message);
+    }
     setLoading(false);
   }
 
@@ -85,6 +97,15 @@ export default function Login() {
             {isLogin ? 'Log In' : 'Sign Up'}
           </button>
         </form>
+
+        <div className={styles.divider}>
+          <span>OR</span>
+        </div>
+
+        <button className={styles.googleButton} onClick={handleGoogleLogin} disabled={loading}>
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google" />
+          {isLogin ? 'Continue with Google' : 'Sign up with Google'}
+        </button>
 
         <div className={styles.footer}>
           <p className="text-label-md text-tertiary">

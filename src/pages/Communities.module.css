@@ -84,3 +84,28 @@
   text-decoration: none;
   font-weight: 600;
 }
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.shareBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-tertiary);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.shareBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+

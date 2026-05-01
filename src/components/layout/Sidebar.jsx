@@ -10,8 +10,17 @@ import styles from './Sidebar.module.css';
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const [pinnedCommunities, setPinnedCommunities] = useState([]);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error("Failed to log out:", err);
+    }
+  };
 
   useEffect(() => {
     async function loadPinned() {
@@ -54,7 +63,7 @@ const Sidebar = () => {
 
         {/* User Profile / Account */}
         <Link to="/profile" className={styles.profileWrapper}>
-          <UserAvatar user={currentUser?.profile} size="3rem" />
+          <UserAvatar user={currentUser?.profile} size="2.5rem" />
           <span className={styles.tooltip}>Profile</span>
         </Link>
 
@@ -106,17 +115,24 @@ const Sidebar = () => {
         })}
 
         {/* Add Community Button */}
-        <button className={styles.navItem} style={{ background: 'transparent', border: 'none' }} onClick={() => navigate('/create-community')}>
+        <button className={styles.navItem} onClick={() => navigate('/create-community')}>
           <span className="material-symbols-outlined">add</span>
           <span className={styles.tooltip}>Create Community</span>
         </button>
       </div>
 
-      {/* Footer Tab */}
-      <Link to="/settings" className={`${styles.navItem} ${location.pathname === '/settings' ? styles.active : ''}`}>
-        <span className="material-symbols-outlined" style={{ fontVariationSettings: location.pathname === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>
-        <span className={styles.tooltip}>Settings</span>
-      </Link>
+      {/* Bottom Section */}
+      <div className={styles.bottomSection}>
+        <Link to="/settings" className={`${styles.navItem} ${location.pathname === '/settings' ? styles.active : ''}`}>
+          <span className="material-symbols-outlined" style={{ fontVariationSettings: location.pathname === '/settings' ? "'FILL' 1" : "'FILL' 0" }}>settings</span>
+          <span className={styles.tooltip}>Settings</span>
+        </Link>
+        
+        <button className={`${styles.navItem} ${styles.logoutBtn}`} onClick={handleLogout}>
+          <span className="material-symbols-outlined">logout</span>
+          <span className={styles.tooltip}>Logout</span>
+        </button>
+      </div>
     </nav>
   );
 };
