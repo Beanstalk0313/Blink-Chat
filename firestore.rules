@@ -1,49 +1,124 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Basic auth check
+
+    // ============================ Helpers ============================
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Check if the requester is not banned
-    // We use exists() to avoid errors if the user doc hasn't been created yet
+    // Signed in and not globally banned. A missing profile doc is treated as not banned.
     function isNotBanned() {
-      let userPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isSignedIn() && (!exists(userPath) || get(userPath).data.get('isBanned', false) != true);
+      return isSignedIn() && (
+        !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned != true
+      );
     }
 
-    // Users Collection
+    function isCommunityMember(communityId) {
+      return isNotBanned() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        communityId in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.joinedCommunities;
+    }
+
+    function isCommunityOwner(communityId) {
+      return isCommunityMember(communityId) &&
+        exists(/databases/$(database)/documents/communities/$(communityId)) &&
+        get(/databases/$(database)/documents/communities/$(communityId)).data.adminUid == request.auth.uid;
+    }
+
+    function hasCommunityPermission(communityId, permission) {
+      return isCommunityMember(communityId) &&
+        exists(/databases/$(database)/documents/communities/$(communityId)) && (
+        isCommunityOwner(communityId) ||
+        (
+          get(/databases/$(database)/documents/communities/$(communityId)).data.memberPermissions != null &&
+          get(/databases/$(database)/documents/communities/$(communityId)).data.memberPermissions[request.auth.uid] != null &&
+          get(/databases/$(database)/documents/communities/$(communityId)).data.memberPermissions[request.auth.uid][permission] == true
+        )
+      );
+    }
+
+    // ============================== users ==============================
+    // NOTE: reads are granted to every signed-in non-banned user because the
+    // member list, global user search, and profiles all read from this
+    // collection. Emails are therefore visible to other signed-in users - move
+    // them to users/{userId}/private if that is a concern.
     match /users/{userId} {
-      // Users can always read their own profile
       allow read: if isSignedIn() && (request.auth.uid == userId || isNotBanned());
-      
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && request.auth.uid == userId && 
-                   (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['isBanned']));
-      
+      allow create: if isNotBanned() && request.auth.uid == userId &&
+        request.resource.data.isBanned == false &&
+        request.resource.data.displayName is string &&
+        request.resource.data.displayName.size() <= 40 &&
+        request.resource.data.joinedCommunities is list &&
+        request.resource.data.joinedCommunities.size() == 0;
+      // Users may only update their own profile. isBanned can never be set from
+      // the client.
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isBanned']) &&
+        request.resource.data.displayName.size() <= 40 &&
+        request.resource.data.aboutMe.size() <= 1000 &&
+        request.resource.data.status.size() <= 40 &&
+        request.resource.data.avatarBase64.size() <= 3000000;
+      allow delete: if false;
+
+      // Per-channel read receipts used by unread dots, "mark all as read", and
+      // the unread-count tab badge. Always scoped to the owner's subcollection.
       match /lastRead/{channelId} {
         allow read, write: if isSignedIn() && request.auth.uid == userId;
       }
     }
 
-    // Communities Collection
+    // ============================ communities ============================
     match /communities/{communityId} {
-      allow read: if isSignedIn() && isNotBanned();
-      
-      allow update: if isNotBanned() && 
-        (resource.data.adminUid == request.auth.uid || request.auth.uid in resource.data.coAdmins);
-      
-      allow create: if isNotBanned();
-      allow delete: if isNotBanned() && resource.data.adminUid == request.auth.uid;
+      allow read: if resource.data.isPrivate == false || isNotBanned();
+      allow create: if isNotBanned() &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.name is string && request.resource.data.name.size() <= 60 &&
+        request.resource.data.description is string && request.resource.data.description.size() <= 300 &&
+        request.resource.data.iconBase64.size() <= 3000000;
+      allow update: if isCommunityOwner(communityId) ||
+        (
+          hasCommunityPermission(communityId, 'manage_community') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'iconBase64', 'theme'])
+        ) ||
+        (
+          hasCommunityPermission(communityId, 'manage_invites') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inviteCode'])
+        ) ||
+        (
+          hasCommunityPermission(communityId, 'manage_roles') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['roles', 'memberRoles', 'memberPermissions'])
+        ) ||
+        (
+          hasCommunityPermission(communityId, 'manage_members') &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bannedUsers', 'timedOutUsers', 'kickedUsers'])
+        );
+      // NOTE: kicks/bans also remove the member from users/{uid}.joinedCommunities.
+      // That write must come from a server-side function (Admin SDK), not the
+      // client, since a rule cannot prove which community the requester moderates.
+      allow delete: if isCommunityOwner(communityId);
     }
 
-    // Channels Collection
+    // ============================== channels ==============================
     match /channels/{channelId} {
-      allow read: if isSignedIn() && isNotBanned();
-      allow create: if isNotBanned();
-      allow update, delete: if isNotBanned();
+      allow read: if isCommunityMember(resource.data.communityId);
+      allow create: if hasCommunityPermission(request.resource.data.communityId, 'manage_channels') &&
+        request.resource.data.name is string && request.resource.data.name.size() <= 60 &&
+        (request.resource.data.type == 'text' || request.resource.data.type == 'voice');
+      allow update: if hasCommunityPermission(resource.data.communityId, 'manage_channels') ||
+        (
+          isCommunityMember(resource.data.communityId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActivity'])
+        );
+      allow delete: if hasCommunityPermission(resource.data.communityId, 'manage_channels');
+    }
+
+    // ============================= app metadata =============================
+    // Readable by any signed-in user (version check); never written by clients.
+    match /app/metadata {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

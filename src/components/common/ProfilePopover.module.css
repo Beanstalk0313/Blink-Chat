@@ -1,0 +1,94 @@
+.popover {
+  z-index: 300;
+  width: min(18rem, calc(100vw - 2rem));
+  padding: 1rem;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.header div:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header span,
+.bio {
+  color: var(--color-tertiary);
+  font-size: 0.8rem;
+}
+
+.bio {
+  margin: 0.75rem 0;
+  line-height: 1.45;
+}
+
+.profileLink {
+  display: inline-block;
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.messageBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.75rem;
+  background: var(--color-primary);
+  color: var(--color-on-primary, #ffffff);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.messageBtn:hover {
+  opacity: 0.9;
+}
+
+.messageBtn span {
+  font-size: 1.1rem;
+}
+
+.pmBlocked {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  color: var(--color-tertiary);
+  font-size: 0.8rem;
+}
+
+.pmBlocked span {
+  font-size: 1rem;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.75rem;
+}

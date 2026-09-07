@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getPublicCommunities, joinCommunity } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './Discover.module.css';
@@ -11,12 +11,20 @@ export default function Discover() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let cancelled = false;
     async function loadCommunities() {
-      const data = await getPublicCommunities();
-      setCommunities(data);
-      setLoading(false);
+      try {
+        const data = await getPublicCommunities();
+        if (!cancelled) setCommunities(data);
+      } catch (error) {
+        console.error('Failed to load public communities:', error);
+        if (!cancelled) setCommunities([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
     loadCommunities();
+    return () => { cancelled = true; };
   }, []);
 
   const handleJoin = async (communityId) => {
@@ -68,7 +76,7 @@ export default function Discover() {
                   <button 
                     className={styles.shareBtn}
                     onClick={() => {
-                      const url = `http://blink.chats.cf/join/${comm.id}`;
+                      const url = `${window.location.origin}/join/${comm.id}`;
                       navigator.clipboard.writeText(url);
                       alert('Community link copied to clipboard!');
                     }}

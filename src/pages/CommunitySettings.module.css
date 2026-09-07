@@ -1,99 +1,169 @@
 .layout {
   display: flex;
-  height: 100%;
   width: 100%;
-  background-color: var(--color-background);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--color-background);
 }
 
 .sidebar {
-  width: 18rem;
-  background-color: rgba(31, 31, 33, 0.6);
-  backdrop-filter: blur(20px) saturate(180%);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  width: 17.5rem;
+  flex: 0 0 17.5rem;
+  background: var(--color-surface-container-low);
+  border-right: 1px solid var(--color-outline-variant);
   display: flex;
   flex-direction: column;
 }
 
 .sidebarHeader {
-  padding: 2rem 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 1.75rem 1.35rem 1.5rem;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.sidebarHeader h2 {
+  margin: 0;
+  color: var(--color-on-surface);
+  letter-spacing: 0;
+}
+
+.sidebarHeader p {
+  margin: 0.6rem 0 0;
+  overflow: hidden;
+  color: var(--color-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav {
-  padding: 1rem;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  padding: 1rem 0.75rem;
 }
 
 .navItem {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-DEFAULT);
-  border: none;
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-on-surface-variant);
   font: var(--font-label-md);
-  cursor: pointer;
-  transition: all 0.3s;
   text-align: left;
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
 }
 
 .navItem:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background: var(--color-surface-container);
   color: var(--color-on-surface);
+  transform: translateX(2px);
 }
 
 .navItem.active {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: var(--color-primary);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+}
+
+.navItem .material-symbols-outlined {
+  font-size: 1.2rem;
 }
 
 .divider {
   height: 1px;
-  background-color: rgba(255, 255, 255, 0.05);
-  margin: 1rem 0;
+  margin: 0.75rem 0;
+  background: var(--color-outline-variant);
 }
 
 .content {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
-  padding: 4rem 2rem;
-  background-color: rgba(0, 0, 0, 0.2);
+  padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 5vw, 4.5rem);
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.18), transparent 45%);
 }
 
 .tabContent {
-  max-width: 48rem;
+  width: min(100%, 65rem);
   margin: 0 auto;
+  animation: contentIn 260ms ease both;
+}
+
+.pageHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.pageHeading h1 {
+  margin: 0.35rem 0 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--color-primary);
+  font: var(--font-label-sm);
+  letter-spacing: 0.08em;
+}
+
+.sectionDescription {
+  max-width: 42rem;
+  margin: 0.75rem 0 0;
+  color: var(--color-tertiary);
+  font: var(--font-body-md);
+  line-height: 1.5;
+}
+
+.sectionCount {
+  flex: 0 0 auto;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  white-space: nowrap;
+}
+
+.form,
+.addChannelForm,
+.roleCreateForm {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
 .form {
-  margin-top: 3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+  margin-top: 2.5rem;
+}
+
+.themeRow {
+  margin-bottom: 2rem;
 }
 
 .iconSection {
   display: flex;
   align-items: center;
-  gap: 2rem;
-  margin-bottom: 1rem;
+  gap: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .iconPreview {
-  width: 120px;
-  height: 120px;
-  border-radius: var(--radius-lg);
-  background-color: var(--color-surface-container);
-  border: 2px dashed rgba(255, 255, 255, 0.1);
   position: relative;
-  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 7.5rem;
+  height: 7.5rem;
+  overflow: hidden;
+  border: 2px dashed var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-container);
 }
 
 .iconPreview img {
@@ -103,266 +173,876 @@
 }
 
 .iconPlaceholder {
-  font-size: 2rem;
   color: var(--color-tertiary);
+  font-size: 2rem;
 }
 
 .iconUpload {
   position: absolute;
-  bottom: 0.5rem;
   right: 0.5rem;
-  width: 2.5rem;
-  height: 2.5rem;
-  background-color: var(--color-primary);
-  color: var(--color-on-primary);
-  border-radius: var(--radius-full);
+  bottom: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  transition: transform 0.2s;
+  transition: transform 180ms ease;
 }
 
 .iconUpload:hover {
-  transform: scale(1.1);
+  transform: scale(1.08);
 }
 
-.inputGroup {
+.iconInfo {
+  min-width: 0;
+}
+
+.iconInfo p {
+  margin: 0;
+}
+
+.inputGroup,
+.fieldGroup {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.55rem;
 }
 
-.inputGroup input, .inputGroup textarea {
-  padding: 1rem;
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-DEFAULT);
-  color: white;
-  font: var(--font-body-md);
+.inputGroup input,
+.inputGroup textarea,
+.fieldGroup input,
+.addChannelForm > input,
+.addChannelForm > select,
+.channelActions select {
+  min-width: 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
   outline: none;
-  transition: border-color 0.3s;
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: var(--font-body-md);
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 
-.inputGroup input:focus, .inputGroup textarea:focus {
+.inputGroup input:focus,
+.inputGroup textarea:focus,
+.fieldGroup input:focus,
+.addChannelForm > input:focus,
+.addChannelForm > select:focus,
+.channelActions select:focus {
   border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
 }
 
 .zoomControl {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.75rem;
+  margin-top: 0.9rem;
+  color: var(--color-tertiary);
 }
 
 .zoomControl input[type="range"] {
-  flex: 1;
+  width: min(14rem, 100%);
   accent-color: var(--color-primary);
 }
 
-.editChannelInput {
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--color-primary);
+.saveBtn,
+.primaryAction,
+.addChannelForm > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  width: fit-content;
+  min-height: 2.7rem;
+  padding: 0.7rem 1rem;
+  border: 0;
   border-radius: var(--radius-sm);
-  color: white;
-  padding: 0.25rem 0.5rem;
-  font: var(--font-body-md);
-  outline: none;
-}
-
-.modalCancel {
-  padding: 0.75rem 1.5rem;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  border-radius: var(--radius-DEFAULT);
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.modalCancel:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.modalConfirm {
-  padding: 0.75rem 1.5rem;
-  background-color: var(--color-primary);
+  background: var(--color-primary);
   color: var(--color-on-primary);
-  border: none;
-  border-radius: var(--radius-DEFAULT);
+  font: var(--font-label-md);
   cursor: pointer;
-  transition: all 0.3s;
-}
-
-.modalConfirm:hover {
-  opacity: 0.9;
+  transition: transform 180ms ease, filter 180ms ease, box-shadow 180ms ease;
 }
 
 .saveBtn {
-  margin-top: 1rem;
-  padding: 1rem 2rem;
-  background-color: var(--color-primary);
-  color: var(--color-on-primary);
-  border: none;
-  border-radius: var(--radius-DEFAULT);
-  font: var(--font-label-md);
-  cursor: pointer;
-  transition: all 0.3s;
-  align-self: flex-start;
+  margin-top: 0.5rem;
 }
 
-.saveBtn:hover {
-  opacity: 0.9;
+.saveBtn:hover,
+.primaryAction:hover,
+.addChannelForm > button:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.2);
   transform: translateY(-2px);
 }
 
 .saveBtn:disabled {
-  opacity: 0.5;
   cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
 }
 
-.secondaryBtn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-md);
+.secondaryBtn,
+.secondaryAction,
+.modalCancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.7rem;
+  padding: 0.7rem 1rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-on-surface);
+  font: var(--font-label-md);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.secondaryBtn:hover,
+.secondaryAction:hover,
+.modalCancel:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface-container);
+  transform: translateY(-1px);
+}
+
+/* Channel management */
+.addChannelForm,
+.roleCreateForm {
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-container-low);
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
+}
+
+.formHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 0.8rem;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.formHeading > .material-symbols-outlined {
+  color: var(--color-primary);
+  font-size: 1.4rem;
+}
+
+.formHeading > svg.formHeadingIcon {
+  width: 1.4rem;
+  height: 1.4rem;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  color: var(--color-primary);
+}
+
+.formHeading div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.formHeading strong {
+  color: var(--color-on-surface);
   font: var(--font-label-md);
 }
 
-.secondaryBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
+.formHeading span {
+  color: var(--color-tertiary);
+  font: var(--font-body-sm);
 }
-
 
 .addChannelForm {
-  margin-top: 3rem;
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 2rem;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 8rem auto minmax(9rem, 13rem) auto;
+  align-items: center;
 }
 
-.addChannelForm input {
-  flex: 1;
-  padding: 1rem;
-  background-color: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-DEFAULT);
-  color: white;
-  outline: none;
+.addChannelForm .formHeading {
+  grid-column: 1 / -1;
 }
 
-.addChannelForm button {
-  padding: 0 2rem;
-  background-color: var(--color-primary);
-  color: var(--color-on-primary);
-  border: none;
-  border-radius: var(--radius-DEFAULT);
+.addChannelForm > input,
+.addChannelForm > select,
+.addChannelForm > button,
+.addChannelForm > .channelRolePicker {
+  width: 100%;
+}
+
+
+.addChannelForm option,
+.channelActions option {
+  padding: 0.3rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container);
+}
+
+.policyToggle,
+.permissionOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-sm);
   cursor: pointer;
 }
 
-.channelList {
+.policyToggle input,
+.permissionOption input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-primary);
+}
+
+.channelList,
+.roleList,
+.memberList {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .channelItem {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-DEFAULT);
-  border: 1px solid transparent;
-  transition: all 0.3s;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-low);
+  animation: itemIn 260ms ease both;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+  position: relative;
 }
 
+.channelItem[draggable="true"] { cursor: grab; }
+.channelItem[draggable="true"]:active { cursor: grabbing; }
+.channelItem.dragging { opacity: 0.7; transform: scale(0.99); }
 .channelItem:hover {
-  border-color: rgba(255, 255, 255, 0.1);
-  background-color: rgba(255, 255, 255, 0.08);
+  border-color: var(--color-primary);
+  background: var(--color-surface-container-high);
+  transform: translateY(-2px);
 }
+.channelItem.dropBefore::before,
+.channelItem.dropAfter::after {
+  content: '';
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  height: 3px;
+  background: var(--color-primary);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(173, 198, 255, 0.7);
+  z-index: 2;
+}
+.channelItem.dropBefore::before { top: -2px; }
+.channelItem.dropAfter::after { bottom: -2px; }
 
 .channelInfo {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  min-width: 10rem;
 }
 
-.channelInfo span {
+.channelInfo > span {
+  color: var(--color-primary);
+}
+
+.channelInfo p {
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channelActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.channelActions select {
+  width: 11rem;
+}
+
+.channelRolePicker,
+.memberRolePicker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 12rem;
+  max-width: 18rem;
+}
+
+.channelRolePicker small,
+.memberRolePicker small {
+  overflow: hidden;
   color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.actionBtn {
-  background: transparent;
-  border: none;
-  color: var(--color-error);
+.pickerLabel {
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  letter-spacing: 0.05em;
+}
+
+.roleCheckboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.roleCheckbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-sm);
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.3s;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.roleCheckbox input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.roleCheckbox span {
+  overflow: hidden;
+  border-left: 0.2rem solid var(--role-color);
+  padding-left: 0.35rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleCheckbox:hover,
+.roleCheckbox.checked {
+  border-color: var(--role-color, var(--color-primary));
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  transform: translateY(-1px);
+}
+
+.noRoles {
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+}
+
+.reorderActions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.adminAlert {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--color-error) 45%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  animation: contentIn 220ms ease both;
+}
+
+.adminAlert > span:nth-child(2) {
+  flex: 1;
+}
+
+.adminAlert button {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+  transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
 .actionBtn:hover {
-  opacity: 1;
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  transform: scale(1.06);
 }
 
-.memberList {
-  display: flex;
-  flex-direction: column;
+.actionBtn.dangerAction:hover {
+  border-color: var(--color-error);
+  background: var(--color-error-container);
+  color: var(--color-error);
+}
+
+.editChannelInput {
+  width: min(18rem, 100%);
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: var(--font-body-md);
+}
+
+/* Role management */
+.roleFormGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 8rem;
   gap: 1rem;
 }
 
+.colorInput {
+  width: 100%;
+  min-height: 2.7rem;
+  padding: 0.25rem;
+  cursor: pointer;
+}
+
+.permissionsFieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0.8rem 0 0;
+  border: 0;
+}
+
+.permissionsFieldset legend,
+.fieldGroup > span {
+  margin-bottom: 0.55rem;
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  letter-spacing: 0.05em;
+}
+
+.permissionGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.roleCard {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-low);
+  animation: itemIn 260ms ease both;
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease;
+}
+
+.roleCard:hover {
+  border-color: color-mix(in srgb, var(--color-primary) 65%, var(--color-outline-variant));
+  background: var(--color-surface-container);
+  transform: translateY(-2px);
+}
+
+.roleCardHeader,
+.roleIdentity,
+.roleActions,
+.roleSummary,
+.editorActions {
+  display: flex;
+  align-items: center;
+}
+
+.roleCardHeader,
+.roleSummary {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.roleIdentity {
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.roleIdentity > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.roleIdentity strong {
+  overflow: hidden;
+  color: var(--color-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roleIdentity span:last-child {
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+}
+
+.roleSwatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.roleActions {
+  gap: 0.5rem;
+}
+
+.roleSummary {
+  align-items: flex-start;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.permissionChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.permissionChips span,
+.roleNote {
+  padding: 0.35rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-sm);
+}
+
+.roleNote {
+  flex: 0 0 auto;
+  color: var(--color-tertiary);
+}
+
+.roleEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.editorActions {
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+/* Members and modal controls */
 .memberItem {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.03);
-  border-radius: var(--radius-DEFAULT);
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-low);
+  animation: itemIn 260ms ease both;
 }
 
 .memberInfo {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.memberInfo p {
+  margin: 0;
 }
 
 .memberActions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
-.kickBtn, .banBtn, .promoteBtn {
-  padding: 0.5rem 1rem;
+.memberActions select,
+.timeoutSelect {
+  max-width: 10rem;
+  padding: 0.55rem;
+  border: 1px solid var(--color-outline-variant);
   border-radius: var(--radius-sm);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.kickBtn,
+.banBtn,
+.promoteBtn {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: white;
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-sm);
   cursor: pointer;
-  transition: all 0.3s;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
 .promoteBtn:hover {
-  background-color: var(--color-primary-container);
   border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
 
-.kickBtn:hover {
-  background-color: var(--color-error-container);
-  border-color: var(--color-error);
-}
-
+.kickBtn:hover,
 .banBtn:hover {
-  background-color: #000;
-  border-color: #ff4444;
+  border-color: var(--color-error);
+  background: var(--color-error-container);
+  color: var(--color-error);
+}
+
+.modalCancel,
+.modalConfirm {
+  min-height: 2.6rem;
+  padding: 0.65rem 1rem;
+}
+
+.modalConfirm {
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font: var(--font-label-md);
+  cursor: pointer;
+}
+
+.modalConfirm:hover {
+  filter: brightness(1.08);
+}
+
+.timeoutGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.5rem;
+}
+
+.timeoutOption {
+  padding: 0.65rem 0.75rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: var(--font-label-md);
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.timeoutOption:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
 }
 
 .loading {
-  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 100%;
+  color: var(--color-tertiary);
+  font: var(--font-body-md);
+}
+
+.loading button {
+  margin-top: 1rem;
+  padding: 0.65rem 1rem;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+@keyframes contentIn {
+  from { opacity: 0; transform: translateY(0.5rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes itemIn {
+  from { opacity: 0; transform: translateY(0.35rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 1050px) {
+  .addChannelForm {
+    grid-template-columns: minmax(0, 1fr) minmax(7rem, 0.5fr);
+  }
+
+  .addChannelForm > input,
+  .addChannelForm > select,
+  .addChannelForm > label,
+  .addChannelForm > button {
+    width: 100%;
+  }
+
+  .addChannelForm > label,
+  .addChannelForm > .channelRolePicker {
+    min-height: 2.7rem;
+  }
+
+  .addChannelForm > button {
+    grid-column: 2;
+  }
+
+  .channelItem,
+  .memberItem {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .channelInfo,
+  .channelActions,
+  .memberActions {
+    width: 100%;
+  }
+
+  .channelActions,
+  .memberActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  .layout {
+    overflow: auto;
+  }
+
+  .sidebar {
+    width: 4.5rem;
+    flex-basis: 4.5rem;
+  }
+
+  .sidebarHeader {
+    padding: 1rem 0.5rem;
+    text-align: center;
+  }
+
+  .sidebarHeader h2 {
+    overflow: hidden;
+    font-size: 0.65rem;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .sidebarHeader p {
+    display: none;
+  }
+
+  .nav {
+    padding: 0.65rem 0.45rem;
+  }
+
+  .navItem {
+    justify-content: center;
+    padding: 0.75rem 0.4rem;
+  }
+
+  .navItem:not(:last-child) {
+    font-size: 0;
+  }
+
+  .navItem .material-symbols-outlined {
+    font-size: 1.25rem;
+  }
+
+  .content {
+    padding: 1.25rem 0.85rem 2rem;
+  }
+
+  .pageHeading {
+    flex-direction: column;
+    gap: 0.8rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .sectionCount {
+    align-self: flex-start;
+  }
+
+  .roleFormGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .addChannelForm {
+    grid-template-columns: 1fr;
+  }
+
+  .addChannelForm > button {
+    grid-column: auto;
+  }
+
+  .channelActions,
+  .memberActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .channelActions select,
+  .memberActions select,
+  .channelActions button,
+  .memberActions button,
+  .channelRolePicker,
+  .memberRolePicker {
+    width: 100%;
+    max-width: none;
+  }
+
+  .roleSummary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .roleNote {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

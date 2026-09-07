@@ -1,87 +1,176 @@
-import React from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-import AppLayout from './components/layout/AppLayout';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Communities from './pages/Communities';
-import ChatArea from './components/chat/ChatArea';
-import Discover from './pages/Discover';
-import Activity from './pages/Activity';
-import Admin from './pages/Admin';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import CreateCommunity from './pages/CreateCommunity';
-import CommunitySettings from './pages/CommunitySettings';
-import JoinCommunity from './pages/JoinCommunity';
 import { useAuth } from './contexts/AuthContext';
+import { lazyWithRecovery } from './components/common/AppErrorScreen';
+import AppErrorScreen from './components/common/AppErrorScreen';
+
+// Lazy load pages for better performance
+const AuthenticatedShell = lazyWithRecovery(() => import('./components/layout/AuthenticatedShell'));
+const Home = lazyWithRecovery(() => import('./pages/Home'));
+const Login = lazyWithRecovery(() => import('./pages/Login'));
+const Communities = lazyWithRecovery(() => import('./pages/Communities'));
+const ChatArea = lazyWithRecovery(() => import('./components/chat/ChatArea'));
+const Discover = lazyWithRecovery(() => import('./pages/Discover'));
+const Admin = lazyWithRecovery(() => import('./pages/Admin'));
+const Profile = lazyWithRecovery(() => import('./pages/Profile'));
+const Settings = lazyWithRecovery(() => import('./pages/Settings'));
+const CreateCommunity = lazyWithRecovery(() => import('./pages/CreateCommunity'));
+const CommunitySettings = lazyWithRecovery(() => import('./pages/CommunitySettings'));
+const PrivateMessages = lazyWithRecovery(() => import('./pages/PrivateMessages'));
+const JoinCommunity = lazyWithRecovery(() => import('./pages/JoinCommunity'));
 
 const ProtectedRoute = ({ children }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, loading } = useAuth();
+  if (loading) {
+    return <PageLoader />;
+  }
   if (!currentUser) return <Navigate to="/login" replace />;
   return children;
+};
+
+// Loading fallback component
+const PageLoader = () => {
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), 12000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (timedOut) {
+    return <AppErrorScreen error={new Error('This screen took too long to load. The network may be offline or the app may be using an outdated cached bundle.')} onRetry={() => window.location.reload()} />;
+  }
+
+  return (
+    <div style={{ height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-lg)' }}>
+      <div className="loader" aria-label="Loading Blink" />
+    </div>
+  );
 };
 
 export const router = createBrowserRouter([
   {
     path: '/login',
-    element: <Login />,
+    element: (
+      <Suspense fallback={<PageLoader />}>
+        <Login />
+      </Suspense>
+    ),
   },
   {
     path: '/',
     element: (
       <ProtectedRoute>
-        <AppLayout />
+        <Suspense fallback={<PageLoader />}>
+          <AuthenticatedShell />
+        </Suspense>
       </ProtectedRoute>
     ),
     children: [
       {
         index: true,
-        element: <Home />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Home />
+          </Suspense>
+        ),
       },
       {
         path: 'communities',
-        element: <Communities />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Communities />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'messages',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <PrivateMessages />
+          </Suspense>
+        ),
       },
       {
         path: 'channels/:communityId',
-        element: <ChatArea />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <ChatArea />
+          </Suspense>
+        ),
       },
       {
         path: 'channels/:communityId/:channelId',
-        element: <ChatArea />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <ChatArea />
+          </Suspense>
+        ),
       },
       {
         path: 'discover',
-        element: <Discover />,
-      },
-      {
-        path: 'activity',
-        element: <Activity />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Discover />
+          </Suspense>
+        ),
       },
       {
         path: 'admin',
-        element: <Admin />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Admin />
+          </Suspense>
+        ),
       },
       {
         path: 'profile',
-        element: <Profile />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Profile />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'profile/:uid',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Profile />
+          </Suspense>
+        ),
       },
       {
         path: 'settings',
-        element: <Settings />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Settings />
+          </Suspense>
+        ),
       },
       {
         path: 'create-community',
-        element: <CreateCommunity />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <CreateCommunity />
+          </Suspense>
+        ),
       },
       {
         path: 'community-settings/:communityId',
-        element: <CommunitySettings />,
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <CommunitySettings />
+          </Suspense>
+        ),
       },
     ],
   },
   {
     path: '/join/:communityId',
-    element: <JoinCommunity />,
+    element: (
+      <Suspense fallback={<PageLoader />}>
+        <JoinCommunity />
+      </Suspense>
+    ),
   },
 ]);

@@ -68,6 +68,27 @@
   font-size: 48px;
 }
 
+.splitLayout {
+  width: min(100%, 1000px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
+.authHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.authHeader img { width: 3rem; height: 3rem; }
+.authForm { display: flex; flex-direction: column; gap: 0.85rem; }
+.modeBtn { margin-top: 1rem; color: var(--color-primary); background: transparent; border: 0; cursor: pointer; }
+.joinHint { color: var(--color-tertiary); text-align: center; }
+
 .content {
   display: flex;
   flex-direction: column;
@@ -162,4 +183,10 @@
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@media (max-width: 760px) {
+  .container { padding: 1rem; }
+  .splitLayout { grid-template-columns: 1fr; }
+  .card { padding: 2rem 1.25rem; }
 }

@@ -1,28 +1,36 @@
-import React, { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 
 const CallContext = createContext();
 
 export const CallProvider = ({ children }) => {
   const [activeCall, setActiveCall] = useState(null);
+  // Incremented on every startCall so the call surface can remount fresh per session.
+  const [callSeq, setCallSeq] = useState(0);
 
-  const startCall = (roomId, type = 'video') => {
-    setActiveCall({ roomId, type, isHidden: false });
+  const leaveParticipant = participant => {
+    if (!participant?.channelId || !participant?.uid) return;
+    import('../services/db').then(({ leaveVoiceChannel }) => {
+      leaveVoiceChannel(participant.channelId, participant.uid).catch(() => {});
+    });
   };
 
-  const hideCall = () => {
-    setActiveCall(prev => prev ? { ...prev, isHidden: true } : null);
-  };
-
-  const showCall = () => {
-    setActiveCall(prev => prev ? { ...prev, isHidden: false } : null);
+  const startCall = (roomId, type = 'video', participant = null) => {
+    setCallSeq(sequence => sequence + 1);
+    setActiveCall(previous => {
+      leaveParticipant(previous?.participant);
+      return { roomId, type, participant };
+    });
   };
 
   const endCall = () => {
-    setActiveCall(null);
+    setActiveCall(previous => {
+      leaveParticipant(previous?.participant);
+      return null;
+    });
   };
 
   return (
-    <CallContext.Provider value={{ activeCall, startCall, hideCall, showCall, endCall }}>
+    <CallContext.Provider value={{ activeCall, callSeq, startCall, endCall }}>
       {children}
     </CallContext.Provider>
   );

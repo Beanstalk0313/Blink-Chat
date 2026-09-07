@@ -1,19 +1,58 @@
 {
   "rules": {
-    ".read": "auth != null",
-    ".write": "auth != null",
-    
+    ".read": false,
+    ".write": false,
+
     "messages": {
       "$channelId": {
+        ".read": "auth != null",
         ".indexOn": ["timestamp"],
-        ".read": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
-        ".write": "auth != null && root.child('banned_users').child(auth.uid).val() !== true",
         "$messageId": {
-          ".validate": "newData.hasChildren(['authorUid', 'timestamp']) && newData.child('authorUid').val() === auth.uid",
-          "isPinned": {
-            // In a strict environment, only validate that an admin is changing this
-            ".validate": "newData.isBoolean()"
+          ".write": "auth != null && (!data.exists() || !newData.exists() || data.child('authorUid').val() === auth.uid || (newData.hasChild('isPinned') && newData.child('authorUid').val() === data.child('authorUid').val() && newData.child('timestamp').val() === data.child('timestamp').val() && (!data.hasChild('text') || newData.child('text').val() === data.child('text').val())))",
+          ".validate": "!newData.exists() || (newData.hasChildren(['authorUid', 'timestamp']) && newData.child('authorUid').isString() && newData.child('timestamp').isNumber() && (!data.exists() ? newData.child('authorUid').val() === auth.uid : newData.child('authorUid').val() === data.child('authorUid').val()) && (!newData.hasChild('text') || (newData.child('text').isString() && newData.child('text').val().length <= 2000)) && (!newData.hasChild('isPinned') || newData.child('isPinned').isBoolean()) && (!newData.hasChild('attachment') || (newData.child('attachment').hasChildren(['url', 'name']) && newData.child('attachment/url').isString() && newData.child('attachment/url').val().length <= 2048 && newData.child('attachment/name').isString() && newData.child('attachment/name').val().length <= 255 && newData.child('attachment/size').isNumber() && newData.child('attachment/size').val() <= 104857600)))"
+        }
+      }
+    },
+
+    "presence": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['online', 'lastSeen']) && newData.child('online').isBoolean() && newData.child('lastSeen').isNumber()"
+      }
+    },
+
+    "voiceParticipants": {
+      ".read": "auth != null",
+      "$channelId": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['uid', 'displayName', 'avatarBase64', 'joinedAt']) && newData.child('uid').val() === auth.uid && newData.child('displayName').isString() && newData.child('displayName').val().length <= 40 && newData.child('avatarBase64').isString() && newData.child('avatarBase64').val().length <= 3000000 && newData.child('joinedAt').isNumber()"
+        }
+      }
+    },
+
+    "privateConversations": {
+      "$conversationId": {
+        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
+        ".write": "auth != null && newData.child('members').child(auth.uid).exists()",
+        ".validate": "newData.hasChildren(['members']) && newData.child('members').hasChildren()",
+        "messages": {
+          "$messageId": {
+            ".read": "auth != null && data.parent().parent().child('members').child(auth.uid).exists()",
+            ".write": "auth != null && (!data.exists() || !newData.exists() || data.child('senderUid').val() === auth.uid)",
+            ".validate": "!newData.exists() || (newData.hasChildren(['senderUid', 'text', 'timestamp']) && newData.child('senderUid').isString() && newData.child('senderUid').val() === auth.uid && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 4000 && newData.child('timestamp').isNumber())"
           }
+        }
+      }
+    },
+
+    "privateConversationsByUser": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$conversationId": {
+          ".write": "auth != null && (auth.uid === $uid || root.child('privateConversations').child($conversationId).child('members').child(auth.uid).exists())",
+          ".validate": "newData.hasChildren(['lastReadAt']) && newData.child('lastReadAt').isNumber() && newData.child('lastReadAt').val() >= 0"
         }
       }
     }

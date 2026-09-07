@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createCommunity } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,18 +21,31 @@ export default function CreateCommunity() {
   const handleIconChange = async (e) => {
     const file = e.target.files[0] || originalFile;
     if (file) {
-      if (e.target.files[0]) setOriginalFile(file);
-      const compressed = await compressAndConvert(file, 200, zoom);
-      setIcon(compressed);
-      setIconPreview(compressed);
+      try {
+        if (e.target.files[0]) setOriginalFile(file);
+        const compressed = await compressAndConvert(file, 200, zoom);
+        setIcon(compressed);
+        setIconPreview(compressed);
+      } catch (error) {
+        console.error('Failed to process community icon:', error);
+        alert(error.message || 'Could not process that image.');
+      }
     }
   };
 
-  React.useEffect(() => {
+  const handleZoomChange = async (event) => {
+    const nextZoom = parseFloat(event.target.value);
+    setZoom(nextZoom);
     if (originalFile) {
-      handleIconChange({ target: { files: [] } });
+      try {
+        const compressed = await compressAndConvert(originalFile, 200, nextZoom);
+        setIcon(compressed);
+        setIconPreview(compressed);
+      } catch (error) {
+        console.error('Failed to resize community icon:', error);
+      }
     }
-  }, [zoom]);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -89,7 +102,7 @@ export default function CreateCommunity() {
                     max="3" 
                     step="0.1" 
                     value={zoom} 
-                    onChange={(e) => setZoom(parseFloat(e.target.value))} 
+                    onChange={handleZoomChange}
                   />
                 </div>
               )}

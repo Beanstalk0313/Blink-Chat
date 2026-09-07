@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, getDocs } from 'firebase/firestore';
-import { firestore } from '../firebase/firebase';
+import { firestore } from '../firebase/data';
 import styles from './Admin.module.css';
 import { Link } from 'react-router-dom';
 
@@ -11,13 +11,21 @@ export default function Admin() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     async function loadManaged() {
-      const q = query(collection(firestore, 'communities'), where('adminUid', '==', currentUser.uid));
-      const snap = await getDocs(q);
-      setManagedCommunities(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-      setLoading(false);
+      try {
+        const q = query(collection(firestore, 'communities'), where('adminUid', '==', currentUser.uid));
+        const snap = await getDocs(q);
+        if (!cancelled) setManagedCommunities(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error('Failed to load managed communities:', error);
+        if (!cancelled) setManagedCommunities([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
     loadManaged();
+    return () => { cancelled = true; };
   }, [currentUser]);
 
   return (
@@ -38,7 +46,7 @@ export default function Admin() {
                 <p className="text-label-sm text-primary">Invite Code: {comm.inviteCode || 'Public'}</p>
               </div>
               <div className={styles.actions}>
-                <Link to={`/admin/${comm.id}/settings`} className={styles.btnSecondary}>Settings</Link>
+                <Link to={`/community-settings/${comm.id}`} className={styles.btnSecondary}>Settings</Link>
                 <Link to={`/channels/${comm.id}`} className={styles.btnPrimary}>View</Link>
               </div>
             </div>

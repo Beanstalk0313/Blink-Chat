@@ -1,48 +1,79 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, createProfile } from '../contexts/AuthContext';
 import { getUserProfile, updateUserProfile } from '../services/db';
 import { compressAndConvert } from '../services/utils';
 import styles from './Profile.module.css';
 
 export default function Profile() {
   const { uid } = useParams();
-  const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({});
   const [zoom, setZoom] = useState(1);
   const [originalFile, setOriginalFile] = useState(null);
+  const [currentYear] = useState(() => new Date().getFullYear());
 
   const targetUid = uid || currentUser?.uid;
   const isOwnProfile = targetUid === currentUser?.uid;
 
+  // Load once per viewed user. Depending on `currentUser` here re-ran this on
+  // every profile snapshot (new object identity), resetting editData and
+  // wiping in-progress edits while the user typed.
   useEffect(() => {
     async function loadProfile() {
-      const data = await getUserProfile(targetUid);
-      setProfile(data);
-      setEditData(data);
-      setLoading(false);
+      if (!targetUid) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        let data = await getUserProfile(targetUid);
+        if (!data && isOwnProfile && currentUser?.uid) {
+          await createProfile(currentUser, currentUser.displayName, currentUser.email);
+          data = await getUserProfile(targetUid);
+        }
+        setProfile(data);
+        setEditData(data || {});
+      } catch (err) {
+        console.error('Failed to load profile:', err);
+      } finally {
+        setLoading(false);
+      }
     }
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetUid]);
 
   const handleAvatarChange = async (e) => {
     const file = e.target.files[0] || originalFile;
     if (file) {
-      if (e.target.files[0]) setOriginalFile(file);
-      const compressed = await compressAndConvert(file, 200, zoom);
-      setEditData({ ...editData, avatarBase64: compressed });
+      try {
+        if (e.target.files[0]) setOriginalFile(file);
+        const compressed = await compressAndConvert(file, 200, zoom);
+        setEditData(previous => ({ ...previous, avatarBase64: compressed }));
+      } catch (error) {
+        console.error('Failed to process avatar:', error);
+        alert(error.message || 'Could not process that image.');
+      }
     }
   };
 
-  useEffect(() => {
+  const handleZoomChange = async (event) => {
+    const nextZoom = parseFloat(event.target.value);
+    setZoom(nextZoom);
     if (originalFile && isEditing) {
-      handleAvatarChange({ target: { files: [] } });
+      try {
+        const compressed = await compressAndConvert(originalFile, 200, nextZoom);
+        setEditData(previous => ({ ...previous, avatarBase64: compressed }));
+      } catch (error) {
+        console.error('Failed to resize avatar:', error);
+      }
     }
-  }, [zoom, isEditing]);
+  };
 
   const handleSave = async () => {
     setLoading(true);
@@ -109,7 +140,7 @@ export default function Profile() {
                       max="3" 
                       step="0.1" 
                       value={zoom} 
-                      onChange={(e) => setZoom(parseFloat(e.target.value))} 
+                      onChange={handleZoomChange}
                     />
                   </div>
                 )}
@@ -119,11 +150,23 @@ export default function Profile() {
             )}
             {isOwnProfile && <p className="text-body-md text-tertiary">{profile.email}</p>}
           </div>
-          {isOwnProfile && (
+          {isOwnProfile ? (
             <button className={styles.editBtn} onClick={() => isEditing ? handleSave() : setIsEditing(true)}>
               <span className="material-symbols-outlined">{isEditing ? 'save' : 'edit'}</span>
               <span>{isEditing ? 'Save' : 'Edit Profile'}</span>
             </button>
+          ) : (
+            profile.blockPrivateMessages ? (
+              <div className={styles.pmBlocked}>
+                <span className="material-symbols-outlined">block</span>
+                <span>Direct messages disabled</span>
+              </div>
+            ) : (
+              <button className={styles.editBtn} onClick={() => navigate(`/messages?user=${targetUid}`)}>
+                <span className="material-symbols-outlined">chat</span>
+                <span>Message</span>
+              </button>
+            )
           )}
         </div>
 
@@ -148,7 +191,7 @@ export default function Profile() {
               <span className="text-label-sm">COMMUNITIES</span>
             </div>
             <div className={styles.statItem}>
-              <span className="text-headline-md">{new Date(profile.createdAt).getFullYear()}</span>
+              <span className="text-headline-md">{profile.createdAt ? new Date(profile.createdAt).getFullYear() : currentYear}</span>
               <span className="text-label-sm">JOINED</span>
             </div>
           </div>

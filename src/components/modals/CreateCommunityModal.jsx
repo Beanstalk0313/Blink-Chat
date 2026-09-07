@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { createCommunity } from '../../services/db';
 import { useAuth } from '../../contexts/AuthContext';
 import styles from './CreateCommunityModal.module.css';

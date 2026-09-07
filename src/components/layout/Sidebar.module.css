@@ -11,7 +11,8 @@
     padding: 1.5rem 0.5rem; /* Base padding */
     width: 4.5rem; /* Base width */
     border-radius: var(--radius-lg);
-    height: calc(100vh - 48px);
+    height: 100%;
+    max-height: 100%;
     background-color: rgba(2, 6, 23, 0.3);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
@@ -20,8 +21,13 @@
     z-index: 40;
     position: relative;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    overflow: hidden;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
+
+  .sidebar::-webkit-scrollbar { display: none; }
 
   .sidebar.expanded {
     width: 17rem;
@@ -43,6 +49,16 @@
   width: 100%;
   gap: 0.5rem;
 }
+
+.brandRow > .navItem {
+  flex: 0 0 3.5rem;
+}
+
+.sidebar.expanded .brandRow > .navItem {
+  flex: 1 1 auto;
+}
+
+
 
 .pinButton {
   background: transparent;
@@ -72,6 +88,10 @@
 
 .pinButton.active {
   color: var(--color-primary);
+}
+
+.sidebar:not(.expanded) .pinButton {
+  display: none;
 }
 
 .profileWrapper {
@@ -117,6 +137,12 @@
 .sidebar.expanded .tooltip {
   display: none;
 }
+
+.unreadDot { display: inline-flex; align-items: center; justify-content: center; min-width: 1.15rem; height: 1.15rem; margin-left: auto; padding: 0 0.25rem; border-radius: 50%; background: var(--color-primary); color: var(--color-on-primary); font: var(--font-label-sm); font-size: 0.65rem; line-height: 1; }
+
+.unreadDotOnly { width: 0.55rem; height: 0.55rem; margin-left: auto; border-radius: 50%; background: var(--color-primary); }
+
+.sidebar:not(.expanded) .unreadDot { position: absolute; top: 0.2rem; right: 0.1rem; }
 
 .pinnedLabel {
   display: flex;
@@ -269,18 +295,88 @@
   color: white;
 }
 
-.logoutBtn {
-  margin-top: 0.25rem;
-  color: #94a3b8;
+.communityLinkWrap {
+  width: 100%;
+  display: flex;
 }
 
-.logoutBtn:hover {
-  color: #ef4444 !important; /* text-red-500 */
-  background-color: rgba(239, 68, 68, 0.1);
-  border-radius: var(--radius-full);
+.contextMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
 }
 
-.logoutBtn:hover .tooltip {
-  background-color: #ef4444;
-  color: white;
+.contextMenu {
+  position: fixed;
+  z-index: 901;
+  min-width: 12.5rem;
+  max-width: 16rem;
+  padding: 0.35rem;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+}
+
+.contextMenuTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 0.25rem;
+}
+
+.contextMenuTitle span:first-child {
+  font-size: 1.1rem;
+  color: var(--color-primary);
+}
+
+.contextMenuTitle span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contextMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-on-surface);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: var(--font-label-md);
+}
+
+.contextMenuItem span:first-child {
+  font-size: 1.15rem;
+  color: var(--color-on-surface-variant);
+}
+
+.contextMenuItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.contextMenuItem:hover span:first-child {
+  color: var(--color-primary);
+}
+
+.contextDanger {
+  color: #fca5a5;
+}
+
+.contextDanger:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.contextDanger:hover span:first-child {
+  color: #ef4444;
 }

@@ -1,18 +1,36 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUserProfile } from '../../services/db';
+import { readStoredValue, writeStoredValue } from '../../services/utils';
 import styles from './Tutorial.module.css';
+
+const tutorialCompletedKey = uid => `blink-tutorial-completed:${uid}`;
 
 const Tutorial = () => {
   const { currentUser } = useAuth();
   const [step, setStep] = useState(0);
-  const [isVisible, setIsVisible] = useState(false);
+  const [dismissedUid, setDismissedUid] = useState(null);
+  const profile = currentUser?.profile;
+  const hasLoadedTutorialStatus = Boolean(
+    profile && Object.prototype.hasOwnProperty.call(profile, 'hasSeenTutorial')
+  );
+  const localTutorialCompleted = currentUser?.uid
+    ? readStoredValue(tutorialCompletedKey(currentUser.uid)) === 'true'
+    : false;
 
   useEffect(() => {
-    if (currentUser?.profile && currentUser.profile.hasSeenTutorial === false) {
-      setIsVisible(true);
+    if (currentUser?.uid && hasLoadedTutorialStatus && profile.hasSeenTutorial === true) {
+      writeStoredValue(tutorialCompletedKey(currentUser.uid), 'true');
     }
-  }, [currentUser]);
+  }, [currentUser?.uid, hasLoadedTutorialStatus, profile?.hasSeenTutorial]);
+
+  const isVisible = Boolean(
+    currentUser?.uid
+      && hasLoadedTutorialStatus
+      && profile.hasSeenTutorial === false
+      && !localTutorialCompleted
+      && dismissedUid !== currentUser.uid
+  );
 
   const steps = [
     {
@@ -56,9 +74,11 @@ const Tutorial = () => {
   };
 
   const completeTutorial = async () => {
-    setIsVisible(false);
+    const uid = currentUser.uid;
+    writeStoredValue(tutorialCompletedKey(uid), 'true');
+    setDismissedUid(uid);
     try {
-      await updateUserProfile(currentUser.uid, { hasSeenTutorial: true });
+      await updateUserProfile(uid, { hasSeenTutorial: true });
     } catch (err) {
       console.error("Failed to update tutorial status:", err);
     }

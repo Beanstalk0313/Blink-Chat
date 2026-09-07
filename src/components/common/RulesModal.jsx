@@ -1,27 +1,54 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { updateUserProfile } from '../../services/db';
+import { readStoredValue, removeStoredValue, writeStoredValue } from '../../services/utils';
 import Modal from './Modal';
 import styles from './RulesModal.module.css';
 
+const rulesAcceptedKey = uid => `blink-rules-accepted:${uid}`;
+
 export default function RulesModal() {
   const { currentUser } = useAuth();
-  const [isOpen, setIsOpen] = useState(currentUser?.profile && !currentUser.profile.hasAcceptedRules);
+  const [dismissedUid, setDismissedUid] = useState(null);
+  const profile = currentUser?.profile;
+  const hasLoadedRulesStatus = currentUser?.profileLoaded === true;
+  const localRulesAccepted = currentUser?.uid
+    ? readStoredValue(rulesAcceptedKey(currentUser.uid)) === 'true'
+    : false;
+
+  useEffect(() => {
+    if (currentUser?.uid && hasLoadedRulesStatus && profile?.hasAcceptedRules === true) {
+      writeStoredValue(rulesAcceptedKey(currentUser.uid), 'true');
+    }
+  }, [currentUser?.uid, hasLoadedRulesStatus, profile?.hasAcceptedRules]);
+
+  const shouldShow = Boolean(
+    currentUser?.uid
+      && hasLoadedRulesStatus
+      && profile?.hasAcceptedRules !== true
+      && !localRulesAccepted
+      && dismissedUid !== currentUser.uid
+  );
 
   const handleAccept = async () => {
+    const uid = currentUser.uid;
+    const key = rulesAcceptedKey(uid);
+    writeStoredValue(key, 'true');
+    setDismissedUid(uid);
     try {
-      await updateUserProfile(currentUser.uid, { hasAcceptedRules: true });
-      setIsOpen(false);
+      await updateUserProfile(uid, { hasAcceptedRules: true });
     } catch (err) {
+      removeStoredValue(key);
+      setDismissedUid(null);
       console.error("Failed to accept rules:", err);
     }
   };
 
-  if (!currentUser?.profile || currentUser.profile.hasAcceptedRules || !isOpen) return null;
+  if (!shouldShow) return null;
 
   return (
     <Modal 
-      isOpen={isOpen} 
+      isOpen={shouldShow}
       title="Welcome to Blink Chat"
       footer={
         <button className={styles.acceptBtn} onClick={handleAccept}>

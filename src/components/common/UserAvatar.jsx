@@ -1,8 +1,7 @@
-import React from 'react';
 import { getColor } from '../../services/utils';
 
 const UserAvatar = ({ user, size = '2.5rem', className = '' }) => {
-  const displayName = user?.displayName || user?.profile?.displayName || 'User';
+  const displayName = user?.displayName || user?.profile?.displayName || user?.email?.split('@')[0] || 'User';
   const avatarBase64 = user?.avatarBase64 || user?.profile?.avatarBase64;
   
   const firstLetter = displayName.charAt(0).toUpperCase();
@@ -21,7 +20,6 @@ const UserAvatar = ({ user, size = '2.5rem', className = '' }) => {
     backgroundColor: backgroundColor,
     flexShrink: 0,
     overflow: 'hidden',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
     position: 'relative'
   };
 

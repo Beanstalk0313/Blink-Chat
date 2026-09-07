@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { updateUserProfile } from '../services/db';
 import Modal from '../components/common/Modal';
 import styles from './Settings.module.css';
+import ThemeSelect from '../components/common/ThemeSelect';
+import { useTheme } from '../contexts/ThemeContext';
 
 export default function Settings() {
   const { currentUser, logout, updateEmail, updatePassword, resetPassword } = useAuth();
-  const { settings: notifySettings, setSettings: setNotifySettings } = useNotifications();
+  const { settings: notifySettings, setSettings: setNotifySettings, notificationPermission, requestNotificationPermission } = useNotifications();
+  const { globalTheme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState('account');
   
   // Account States
@@ -21,9 +24,26 @@ export default function Settings() {
   
   // Privacy States
   const [isPrivate, setIsPrivate] = useState(currentUser?.profile?.isPrivateProfile || false);
+  const [blockPMs, setBlockPMs] = useState(currentUser?.profile?.blockPrivateMessages || false);
+  const [status, setStatus] = useState(currentUser?.profile?.status || 'Online');
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  // Sync form fields only when the signed-in user changes, using render-time
+  // adjustment (an effect here would clobber unsaved form edits on every
+  // profile snapshot with stale values while the user was typing).
+  const [syncedUid, setSyncedUid] = useState(currentUser?.uid);
+  if (syncedUid !== currentUser?.uid) {
+    setSyncedUid(currentUser?.uid);
+    const profile = currentUser?.profile || {};
+    setNewEmail(currentUser?.email || profile.email || '');
+    setDisplayName(profile.displayName || currentUser?.displayName || '');
+    setAboutMe(profile.aboutMe || '');
+    setIsPrivate(Boolean(profile.isPrivateProfile));
+    setBlockPMs(Boolean(profile.blockPrivateMessages));
+    setStatus(profile.status || 'Online');
+  }
 
   const handleUpdateAccount = async (e) => {
     e.preventDefault();
@@ -49,12 +69,13 @@ export default function Settings() {
     e.preventDefault();
     setLoading(true);
     try {
-      await updateUserProfile(currentUser.uid, { 
+      await updateUserProfile(currentUser.uid, {
         displayName,
-        aboutMe
+        aboutMe,
+        status
       });
       setMessage({ type: 'success', text: 'Profile updated!' });
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to update profile' });
     }
     setLoading(false);
@@ -64,15 +85,24 @@ export default function Settings() {
     setIsPrivate(val);
     try {
       await updateUserProfile(currentUser.uid, { isPrivateProfile: val });
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update privacy settings' });
+    }
+  };
+
+  const handleBlockPMsToggle = async (val) => {
+    setBlockPMs(val);
+    try {
+      await updateUserProfile(currentUser.uid, { blockPrivateMessages: val });
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update privacy settings' });
     }
   };
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth <= 1024) {
         setIsSidebarOpen(false);
@@ -88,7 +118,7 @@ export default function Settings() {
     try {
       await resetPassword(currentUser.email);
       setIsResetModalOpen(true);
-    } catch (err) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to send reset email' });
     }
   };
@@ -217,6 +247,15 @@ export default function Settings() {
                     placeholder="Tell us about yourself..."
                   />
                 </div>
+                <div className={styles.inputGroup}>
+                  <label className="text-label-md">STATUS</label>
+                  <select value={status} onChange={e => setStatus(e.target.value)} className={styles.input}>
+                    <option>Online</option>
+                    <option>Away</option>
+                    <option>Do Not Disturb</option>
+                    <option>Invisible</option>
+                  </select>
+                </div>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
                   {loading ? 'Saving...' : 'Update Profile'}
                 </button>
@@ -227,6 +266,29 @@ export default function Settings() {
           {activeTab === 'notifications' && (
             <div className={styles.section}>
               <h1 className="text-display-xl">Notifications</h1>
+              <p className="text-body-md text-tertiary">These preferences control alerts while Blink is open or running in the background.</p>
+              {notificationPermission === 'default' && (
+                <div className={styles.settingCard}>
+                  <div className={styles.settingInfo}>
+                    <span className="text-label-md">ENABLE THIS DEVICE</span>
+                    <p className="text-body-md text-tertiary">Allow notifications here so Blink can alert you while you are in another channel or the browser tab is in the background.</p>
+                  </div>
+                  <button type="button" className={styles.submitBtn} onClick={() => requestNotificationPermission().catch(() => {})}>Enable</button>
+                </div>
+              )}
+              {notificationPermission === 'denied' && (
+                <p className="text-body-md text-tertiary">Notifications are blocked for this device. Allow them in Safari or the device notification settings, then reload Blink.</p>
+              )}
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">ALLOW NOTIFICATIONS</span>
+                  <p className="text-body-md text-tertiary">Turn this off to stop local and background push notifications.</p>
+                </div>
+                <label className={styles.switch}>
+                  <input type="checkbox" checked={notifySettings.enabled} onChange={(e) => setNotifySettings(prev => ({ ...prev, enabled: e.target.checked }))} />
+                  <span className={styles.slider}></span>
+                </label>
+              </div>
               <div className={styles.settingCard}>
                 <div className={styles.settingInfo}>
                   <span className="text-label-md">SOUND EFFECTS</span>
@@ -271,6 +333,16 @@ export default function Settings() {
                   <span className={styles.slider}></span>
                 </label>
               </div>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">BLOCK PRIVATE MESSAGES</span>
+                  <p className="text-body-md text-tertiary">When enabled, other users cannot send you direct messages.</p>
+                </div>
+                <label className={styles.switch}>
+                  <input type="checkbox" checked={blockPMs} onChange={(e) => handleBlockPMsToggle(e.target.checked)} />
+                  <span className={styles.slider}></span>
+                </label>
+              </div>
             </div>
           )}
 
@@ -278,9 +350,16 @@ export default function Settings() {
             <div className={styles.section}>
               <h1 className="text-display-xl">Appearance</h1>
               <p className="text-body-lg text-tertiary">Customize how Blink looks for you.</p>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">APP THEME</span>
+                  <p className="text-body-md text-tertiary">Your theme follows you across Blink.</p>
+                </div>
+                <ThemeSelect value={globalTheme} onChange={setTheme} label="" />
+              </div>
               <div className={styles.comingSoon}>
-                <span className="material-symbols-outlined">auto_awesome</span>
-                <p>Themes and accessibility options coming soon!</p>
+                <span className="material-symbols-outlined">accessibility_new</span>
+                <p>Reduced motion and contrast controls are ready for the next release.</p>
               </div>
             </div>
           )}
