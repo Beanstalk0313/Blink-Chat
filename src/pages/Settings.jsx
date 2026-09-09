@@ -6,6 +6,8 @@ import Modal from '../components/common/Modal';
 import styles from './Settings.module.css';
 import ThemeSelect from '../components/common/ThemeSelect';
 import { useTheme } from '../contexts/ThemeContext';
+import { Link } from 'react-router-dom';
+import { APP_VERSION } from '../version';
 
 export default function Settings() {
   const { currentUser, logout, updateEmail, updatePassword, resetPassword } = useAuth();
@@ -374,8 +376,9 @@ export default function Settings() {
                 </div>
                 <p className="text-body-lg">The future of real-time communication.</p>
                 <div className={styles.versionInfo}>
-                  <p className="text-label-md">Version 2.2.0</p>
+                  <p className="text-label-md">Version {APP_VERSION}</p>
                   <p className="text-label-sm text-tertiary">Built with React & Firebase</p>
+                  <Link to="/whats-new" className="text-label-md" style={{ color: 'var(--color-primary)' }}>What&apos;s new</Link>
                 </div>
                 <p className="text-body-md">Developed with ❤️ for the future of chat.</p>
               </div>

@@ -76,3 +76,27 @@ export const removeStoredValue = (key) => {
     return false;
   }
 };
+
+// Small built-in profanity list used by the community auto-mod filter. Admins
+// can toggle profanity/link filtering per community from the settings page.
+export const PROFANITY_LIST = [
+  'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'cunt', 'dick', 'pussy',
+  'whore', 'slut', 'nigger', 'nigga', 'faggot', 'retard', 'fag'
+];
+
+// Returns { blocked: false } or { blocked: true, reason }. Enforced on send in
+// the chat composer (community.autoMod.profanity / autoMod.links).
+export function filterCommunityMessage(text, community) {
+  const autoMod = community?.autoMod || {};
+  if (autoMod.profanity) {
+    const lower = String(text || '').toLowerCase();
+    const blockedWord = PROFANITY_LIST.find(word => new RegExp(`\\b${word}\\b`).test(lower));
+    if (blockedWord) {
+      return { blocked: true, reason: 'Your message contains language this community blocks.' };
+    }
+  }
+  if (autoMod.links && /(https?:\/\/|www\.)[^\s]+/i.test(String(text || ''))) {
+    return { blocked: true, reason: 'Links are disabled in this community.' };
+  }
+  return { blocked: false };
+}

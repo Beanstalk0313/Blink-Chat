@@ -53,13 +53,15 @@ service cloud.firestore {
         request.resource.data.joinedCommunities is list &&
         request.resource.data.joinedCommunities.size() == 0;
       // Users may only update their own profile. isBanned can never be set from
-      // the client.
+      // the client. Optional profile fields may be absent on legacy profiles;
+      // reading .size() on a missing key throws and denies the whole write, so
+      // use Map.get() defaults instead of direct property access.
       allow update: if isSignedIn() && request.auth.uid == userId &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isBanned']) &&
-        request.resource.data.displayName.size() <= 40 &&
-        request.resource.data.aboutMe.size() <= 1000 &&
-        request.resource.data.status.size() <= 40 &&
-        request.resource.data.avatarBase64.size() <= 3000000;
+        request.resource.data.get('displayName', '').size() <= 40 &&
+        request.resource.data.get('aboutMe', '').size() <= 1000 &&
+        request.resource.data.get('status', '').size() <= 40 &&
+        request.resource.data.get('avatarBase64', '').size() <= 3000000;
       allow delete: if false;
 
       // Per-channel read receipts used by unread dots, "mark all as read", and
@@ -80,7 +82,7 @@ service cloud.firestore {
       allow update: if isCommunityOwner(communityId) ||
         (
           hasCommunityPermission(communityId, 'manage_community') &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'iconBase64', 'theme'])
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'iconBase64', 'theme', 'systemMessages', 'autoMod'])
         ) ||
         (
           hasCommunityPermission(communityId, 'manage_invites') &&

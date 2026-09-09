@@ -1,0 +1,263 @@
+/* Blink Chat — Framework7 "Native Initiative" styles.
+   Loads Framework7 CSS, then maps Blink's dark palette onto the iOS and
+   Material themes. All overrides are scoped under the body.blink-native class
+   applied by NativeApp. */
+/* The lite-bundle JS includes every component module (Panel, Dialog, ...),
+   so the CSS must be the bundle too. 'framework7/css' resolves to the
+   core-only stylesheet, which leaves Panel/View/Page completely unstyled
+   (panel renders as a full-screen block and .view collapses to zero height). */
+@import 'framework7/css/bundle';
+
+/* The native build does not load src/index.css (which is where the web app
+   pulls in Material Symbols), so every material-symbols-outlined icon rendered
+   as raw ligature text ("edit", "save", "menu", ...). Load the font here. */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
+
+/* ---------- Blink palette on Framework7 ---------- */
+/* F7 sizes .view with height:100%, but the React wrappers sit between body
+   and the view tree with no intrinsic height, which collapses the whole app
+   to zero height. Chain the height through every layer. */
+html,
+body,
+#app,
+#app > div,
+.framework7-root {
+  height: 100%;
+}
+
+body.blink-native {
+  --f7-theme-color: #4b8eff;
+  --f7-theme-color-rgb: 75, 142, 255;
+  --f7-page-bg-color: #131315;
+  --f7-text-color: #e4e2e4;
+  --f7-font-family: Manrope, -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #131315;
+}
+
+/* iOS theme (dark). F7 puts .ios/.dark on <html> (the ancestor of body), so
+   match both directions to cover every F7 version/layout. */
+html.ios body.blink-native,
+html.ios.dark body.blink-native,
+.blink-native.ios,
+.blink-native.ios.dark {
+  --f7-page-bg-color: #131315;
+  --f7-page-bg-color-rgb: 19, 19, 21;
+  --f7-text-color: #e4e2e4;
+  --f7-bars-bg-color: rgba(24, 24, 26, 0.92);
+  --f7-bars-bg-color-rgb: 24, 24, 26;
+  --f7-bars-text-color: #f4f4f5;
+  --f7-tabbar-link-active-color: #4b8eff;
+  --f7-list-bg-color: #1b1b1d;
+  --f7-list-border-color: rgba(255, 255, 255, 0.08);
+  --f7-list-item-border-color: rgba(255, 255, 255, 0.08);
+  --f7-list-item-title-text-color: #f4f4f5;
+  --f7-list-item-subtitle-text-color: #c1c6d7;
+  --f7-list-item-footer-text-color: #8b90a0;
+  --f7-list-item-after-text-color: #c1c6d7;
+  --f7-input-bg-color: transparent;
+  --f7-input-text-color: #f4f4f5;
+  --f7-block-title-text-color: #8b90a0;
+  --f7-block-strong-bg-color: #1b1b1d;
+  --f7-dialog-bg-color: #1f1f21;
+  --f7-dialog-text-color: #e4e2e4;
+  --f7-sheet-bg-color: #1f1f21;
+  --f7-navbar-subtitle-text-color: #8b90a0;
+  --f7-searchbar-bg-color: rgba(24, 24, 26, 0.92);
+}
+
+/* Material theme (dark) — overrides after Framework7's dynamic MD palette so
+   Blink surfaces keep their own near-black tones. */
+html.md body.blink-native,
+html.md.dark body.blink-native,
+.blink-native.md,
+.blink-native.md.dark {
+  --f7-md-primary: #4b8eff;
+  --f7-md-on-primary: #ffffff;
+  --f7-md-surface: #131315;
+  --f7-md-surface-1: #1b1b1d;
+  --f7-md-surface-2: #1f1f21;
+  --f7-md-surface-3: #2a2a2c;
+  --f7-md-surface-4: #2a2a2c;
+  --f7-md-surface-5: #353437;
+  --f7-md-on-surface: #e4e2e4;
+  --f7-md-on-surface-variant: #c1c6d7;
+  --f7-md-outline: #8b90a0;
+  --f7-md-secondary-container: #7d01b1;
+  --f7-md-on-secondary-container: #e5a9ff;
+  --f7-page-bg-color: #131315;
+  --f7-text-color: #e4e2e4;
+}
+
+/* ---------- Shared native helpers ---------- */
+/* Navbar menu button. A plain <button> (not Framework7's Link): the F7 click
+   machinery on anchors is unreliable here, and a button sidesteps it entirely.
+   It renders a Material Symbols menu glyph and opens the React sidebar. */
+/* Android (Material) ripple containment: Framework7 attaches its ripple to
+   every <button> (its touchRippleElements list), and the expanding wave is
+   sized up to ~2x the button's diagonal. Without position:relative +
+   overflow:hidden the wave bleeds out of small/round buttons and reads as a
+   stray gradient blob. Contained, every button gets the proper native ripple
+   clipped to its own shape. */
+.blink-native button {
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* iOS has no Material ripple; give the round navbar menu button a subtle
+   press tint there (on Android the Framework7 ripple above is the feedback). */
+html.ios.blink-native .n-menu-btn:active,
+html.ios.dark.blink-native .n-menu-btn:active,
+.blink-native.ios .n-menu-btn:active,
+.blink-native.ios.dark .n-menu-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.blink-native .n-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--f7-bars-text-color, #f4f4f5);
+  cursor: pointer;
+}
+
+.blink-native .n-menu-btn .material-symbols-outlined {
+  font-size: 26px;
+}
+.blink-native .material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  font-feature-settings: 'liga';
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+.blink-native .page-content {
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+}
+
+.blink-native .n-avatar {
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #2a2a2c;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.blink-native .n-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blink-native .n-muted {
+  color: #8b90a0;
+}
+
+.blink-native .cl-entry {
+  margin: 12px 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.blink-native .cl-entry h3 {
+  margin: 0 0 2px;
+  font-size: 17px;
+  color: #f4f4f5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.blink-native .cl-entry .cl-date {
+  color: #8b90a0;
+  font-size: 12px;
+  margin: 0 0 10px;
+}
+
+.blink-native .cl-entry ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #c1c6d7;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.blink-native .cl-current {
+  border-color: rgba(75, 142, 255, 0.5);
+}
+
+/* Call overlay (MiroTalk) in the native app. The shared CallOverlay is
+   absolutely positioned against the web layout at z-index 950 - both wrong
+   here: F7's .view content is z-index 5000 and there is no content column.
+   CallOverlay adds .n-call-overlay when body.blink-native is present, so we
+   switch it to fixed positioning above the page (below the sidebar/modals). */
+.blink-native .n-call-overlay {
+  position: fixed;
+  top: auto;
+  left: auto;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: min(23rem, calc(100% - 24px));
+  height: 17rem;
+  max-width: none;
+  border-radius: 14px;
+  transform: none;
+  z-index: 6500;
+}
+
+/* Big view while on the voice channel's page: fills the whole screen. */
+.blink-native .n-call-overlay.n-call-pane {
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  z-index: 5500;
+}
+
+.blink-native .n-call-overlay.n-call-minimized {
+  height: 3.75rem;
+}
+
+/* New-message appear animation (F7's own) honors reduced-motion. */
+@media (prefers-reduced-motion: reduce) {
+  .blink-native .message-appear-from-bottom {
+    animation: none;
+  }
+}

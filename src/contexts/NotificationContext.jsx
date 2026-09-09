@@ -88,6 +88,9 @@ export const NotificationProvider = ({ children }) => {
 
     return subscribeToUserChannelMessages(uid, communityIds, message => {
       if (message.authorUid === uid) return;
+      // Join/leave system messages are in-channel announcements, not
+      // notification-worthy activity.
+      if (message.system) return;
       if (preferences.communityMuted?.[message.communityId]) return;
       const mode = preferences.channelModes?.[message.channelId] || 'mentions';
       if (mode === 'none') return;

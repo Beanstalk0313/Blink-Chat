@@ -1,0 +1,107 @@
+/* Web "What's new" screen, ported from the native Changelog page. */
+.page {
+  min-height: 100%;
+  padding: 2rem clamp(1rem, 4vw, 3rem);
+  max-width: 46rem;
+  margin: 0 auto;
+  color: var(--color-text, #e4e2e4);
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.6rem;
+}
+
+.versionLabel {
+  font-size: 0.8rem;
+  color: var(--color-text-tertiary, #8a8f98);
+  white-space: nowrap;
+}
+
+.intro {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  background: var(--color-surface, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  margin-bottom: 1.5rem;
+}
+
+.intro p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-secondary, #b6bac2);
+}
+
+.logo {
+  width: 2.2rem;
+  height: 2.2rem;
+  flex: none;
+}
+
+.entry {
+  padding: 1.1rem 1.2rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  background: var(--color-surface, rgba(255, 255, 255, 0.03));
+  margin-bottom: 1rem;
+}
+
+.entry.current {
+  border-color: var(--color-primary, #4b8eff);
+  box-shadow: 0 0 0 1px var(--color-primary, #4b8eff) inset;
+}
+
+.entry h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.newBadge {
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--color-primary, #4b8eff);
+  color: #fff;
+}
+
+.meta {
+  margin: 0 0 0.6rem;
+  font-size: 0.78rem;
+  color: var(--color-text-tertiary, #8a8f98);
+}
+
+.entry ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.entry li {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary, #b6bac2);
+}
+
+.empty {
+  text-align: center;
+  color: var(--color-text-tertiary, #8a8f98);
+  padding: 3rem 0;
+}

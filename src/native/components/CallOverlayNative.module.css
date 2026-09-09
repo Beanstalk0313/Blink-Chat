@@ -1,0 +1,19 @@
+/* Minimal native placement adjustments for the call overlay window. The core
+   CallOverlay styles still apply; these shift the surface so it clears the
+   native tabbar and safe areas. */
+.overlay {
+  position: fixed;
+  right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  left: auto;
+  top: auto;
+  transform: none;
+  z-index: 6000;
+}
+
+.overlay.pane {
+  position: fixed;
+  inset: 0;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  transform: none;
+}

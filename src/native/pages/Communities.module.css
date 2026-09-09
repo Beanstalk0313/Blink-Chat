@@ -1,0 +1,153 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.navIcon {
+  display: inline-flex;
+  margin-right: 12px;
+  color: #4b8eff;
+  font-size: 22px;
+}
+
+.loading {
+  margin: 24px 20px;
+  color: #8b90a0;
+}
+
+.card {
+  margin: 0 16px 14px;
+  border-radius: 18px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.mainRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  color: #e4e2e4;
+  text-decoration: none;
+}
+
+.icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.iconFallback {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4b8eff, #7d01b1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.info strong {
+  font-size: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info small {
+  color: #8b90a0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unreadRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.mentionBadge {
+  background: #4b8eff;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.dotRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #adc6ff;
+}
+
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4b8eff;
+}
+
+.actions {
+  display: flex;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.actions button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 4px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  color: #c1c6d7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.actions button:first-child {
+  border-left: 0;
+}
+
+.actions button.danger {
+  color: #ff8a80;
+}
+
+.empty {
+  margin: 32px 16px;
+  padding: 32px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  text-align: center;
+  color: #8b90a0;
+}
+
+.discoverBtn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: #4b8eff;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}

@@ -1,0 +1,154 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.content {
+  padding-bottom: 40px;
+}
+
+.alert {
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.alertSuccess {
+  background: rgba(76, 175, 80, 0.14);
+  color: #a5d6a7;
+}
+
+.alertError {
+  background: rgba(255, 82, 82, 0.12);
+  color: #ff8a80;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+  font-weight: 600;
+}
+
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: #4b8eff;
+}
+
+.primaryBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.7;
+}
+
+.linkBtn {
+  background: transparent;
+  border: 0;
+  color: #adc6ff;
+  font-size: 14px;
+  cursor: pointer;
+  align-self: center;
+  padding: 4px;
+}
+
+.dangerBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 82, 82, 0.4);
+  background: rgba(255, 82, 82, 0.1);
+  color: #ff8a80;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.toggleRow strong {
+  display: block;
+  font-size: 15px;
+  color: #f4f4f5;
+}
+
+.toggleRow small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.hint {
+  margin: 0;
+  color: #8b90a0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.aboutCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 24px;
+  border-radius: 16px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.aboutCard img {
+  width: 48px;
+  height: 48px;
+}
+
+.aboutCard strong {
+  color: #f4f4f5;
+}
+
+.aboutCard span {
+  color: #8b90a0;
+  font-size: 13px;
+}

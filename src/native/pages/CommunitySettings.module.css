@@ -1,0 +1,583 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.center {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #8b90a0;
+}
+
+.loader {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #4b8eff;
+  border-radius: 50%;
+  animation: loader-spin 1s linear infinite;
+}
+
+@keyframes loader-spin { to { transform: rotate(360deg); } }
+
+.content {
+  padding-bottom: 40px;
+}
+
+.chipRow {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 16px 12px;
+  scrollbar-width: none;
+}
+
+.chipRow::-webkit-scrollbar { display: none; }
+
+.chip {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e4e2e4;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.chipActive {
+  background: rgba(75, 142, 255, 0.18);
+  border-color: rgba(75, 142, 255, 0.5);
+  color: #adc6ff;
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 82, 82, 0.12);
+  color: #ff8a80;
+  font-size: 13px;
+}
+
+.errorBanner button {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #ff8a80;
+  cursor: pointer;
+}
+
+.tabBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px;
+}
+
+.sectionMeta {
+  margin: 0;
+  color: #8b90a0;
+  font-size: 14px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea,
+.addChannelForm input,
+.addChannelForm select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: #4b8eff;
+}
+
+.inviteRow {
+  display: flex;
+  gap: 8px;
+}
+
+.inviteRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.inviteRow button {
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #c1c6d7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.hint {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.primaryBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.6;
+}
+
+.iconSection {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.iconPreview {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b90a0;
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.iconPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.iconInfo p {
+  margin: 0;
+  color: #e4e2e4;
+  font-size: 14px;
+}
+
+.iconInfo small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.addChannelForm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.addChannelForm input[type='text'] {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+
+.addChannelForm select {
+  flex: 0 0 110px;
+}
+
+.addChannelForm button {
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lockedToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #c1c6d7;
+  font-size: 13px;
+}
+
+.channelList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.channelItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.channelItem > .material-symbols-outlined {
+  color: #8b90a0;
+}
+
+.channelName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.editChannelInput {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(75, 142, 255, 0.5);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 15px;
+  outline: none;
+}
+
+.channelActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.channelActions button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.channelActions button:disabled {
+  opacity: 0.35;
+}
+
+.channelActions .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.memberList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memberItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.memberInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.memberInfo strong {
+  font-size: 14px;
+  color: #f4f4f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memberInfo small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.memberActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.memberActions select {
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #1f1f21;
+  color: #e4e2e4;
+  font-size: 12px;
+  outline: none;
+  max-width: 110px;
+}
+
+.memberActions button {
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #c1c6d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dangerAction {
+  color: #ff8a80 !important;
+  border-color: rgba(255, 82, 82, 0.4) !important;
+}
+
+.roleCheckRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.permChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #1f1f21;
+  color: #c1c6d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.permChip input {
+  display: none;
+}
+
+.permChipActive {
+  border-color: rgba(75, 142, 255, 0.5);
+  color: #adc6ff;
+  background: rgba(75, 142, 255, 0.12);
+}
+
+.roleList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roleCard {
+  border-radius: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.roleHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.roleSwatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.roleIdentity {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.roleIdentity strong {
+  font-size: 14px;
+  color: #f4f4f5;
+}
+
+.roleIdentity small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.roleHead button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.roleHead .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.roleEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.roleEditor input {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 14px;
+  outline: none;
+}
+
+.colorInput {
+  width: 48px !important;
+  height: 40px;
+  padding: 2px !important;
+}
+
+.editorActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.editorActions button {
+  padding: 9px 14px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #c1c6d7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.editorActions .primaryBtn {
+  border: 0;
+}
+
+.settingBlock {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.settingTitle {
+  margin: 0 0 10px;
+  color: #8b90a0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  color: #e4e2e4;
+  font-size: 14px;
+}
+
+.selectInput {
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f5;
+  font-size: 14px;
+}
+
+.selectInput option {
+  color: #f4f4f5;
+  background: #1f1f21;
+}
+
+.channelRoles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.channelRolesLabel {
+  color: #8b90a0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.roleChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.roleChip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #c1c6d7;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.roleChipActive {
+  background: rgba(75, 142, 255, 0.22);
+  border-color: #4b8eff;
+  color: #f4f4f5;
+}

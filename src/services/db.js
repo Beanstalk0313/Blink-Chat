@@ -103,6 +103,9 @@ export async function joinCommunity(uid, communityId) {
   const userRef = doc(firestore, 'users', uid);
   await updateDoc(userRef, { joinedCommunities: arrayUnion(communityId) });
   clearSessionCache(`community:${communityId}`);
+  // Best-effort "X joined the community" system message (admin-configured channel).
+  const profile = await getUserProfile(uid).catch(() => null);
+  logCommunitySystemMessage(communityId, uid, profile?.displayName, 'join');
 }
 
 export async function getPublicCommunities() {
@@ -138,6 +141,7 @@ export async function createChannel(communityId, name, type = 'text', options = 
     type,
     allowedRoles: options.allowedRoles || [],
     isLocked: Boolean(options.isLocked),
+    slowModeSeconds: Number(options.slowModeSeconds) || 0,
     position: nextPosition,
     createdAt: new Date().toISOString(),
     lastActivity: Date.now()
@@ -298,6 +302,32 @@ export async function leaveCommunity(uid, communityId) {
   clearSessionCache(`members:${communityId}`);
   clearSessionCache(`community:${communityId}`);
   sessionCache.delete(`user:${uid}`);
+  // Best-effort "X left the community" system message (admin-configured channel).
+  // This also runs when a kicked user's own client performs its cleanup.
+  logCommunitySystemMessage(communityId, uid, userSnap.exists() ? userSnap.data().displayName : undefined, 'leave');
+}
+
+// Posts an admin-configured "joined/left" system message to the community's
+// chosen channel. Fully optional: nothing is written unless the community has
+// systemMessages enabled and a channel selected. Best-effort by design.
+async function logCommunitySystemMessage(communityId, uid, displayName, type) {
+  if (!db) return;
+  try {
+    const community = await getCommunity(communityId);
+    const settings = community?.systemMessages || {};
+    const enabled = type === 'join' ? settings.joinEnabled === true : settings.leaveEnabled === true;
+    const channelId = settings.channelId;
+    if (!enabled || !channelId) return;
+    await set(push(ref(db, `messages/${channelId}`)), {
+      authorUid: uid,
+      system: type,
+      name: displayName || 'User',
+      timestamp: Date.now(),
+      isPinned: false
+    });
+  } catch (error) {
+    console.warn('Could not log community system message:', error);
+  }
 }
 
 export async function unbanUser(communityId, uid) {
@@ -373,7 +403,7 @@ export async function togglePinCommunity(uid, communityId) {
 }
 
 // Messages
-export async function sendMessage(channelId, text, authorUid, attachment = null) {
+export async function sendMessage(channelId, text, authorUid, attachment = null, options = {}) {
   if (!db) throw new Error('Realtime Database is not configured');
   const messagesRef = ref(db, `messages/${channelId}`);
   const newMessageRef = push(messagesRef);
@@ -386,6 +416,9 @@ export async function sendMessage(channelId, text, authorUid, attachment = null)
     attachment: attachment || null,
     isPinned: false
   };
+  if (options.replyTo) message.replyTo = options.replyTo;
+  if (options.poll) message.poll = options.poll;
+  if (options.game) message.game = { ...options.game, moves: {} };
   await set(newMessageRef, message);
   // Best-effort metadata only: the message is already stored in RTDB, so a
   // Firestore hiccup here must not make the UI report the message as failed.
@@ -393,6 +426,12 @@ export async function sendMessage(channelId, text, authorUid, attachment = null)
     console.warn('Could not update channel activity:', error);
   });
   return newMessageRef;
+}
+
+export async function submitGameMove(channelId, messageId, uid, cell, mark) {
+  if (!db || !channelId || !messageId || !uid) return;
+  const moveRef = push(ref(db, `messages/${channelId}/${messageId}/game/moves`));
+  await set(moveRef, { uid, cell, mark, timestamp: Date.now() });
 }
 
 export async function editMessage(channelId, messageId, newText) {
@@ -409,6 +448,84 @@ export async function deleteMessage(channelId, messageId) {
 
 export async function togglePinMessage(channelId, messageId, currentStatus) {
   return set(ref(db, `messages/${channelId}/${messageId}/isPinned`), !currentStatus);
+}
+
+export async function toggleReaction(channelId, messageId, emoji, uid, currentlyReacted) {
+  if (!db) return;
+  // Optimistic client-side toggle: the caller already knows its own reaction
+  // state from the message object, so no read is needed (one write only).
+  await set(ref(db, `messages/${channelId}/${messageId}/reactions/${emoji}/${uid}`), currentlyReacted ? null : true);
+}
+
+// Polls: one vote per user across options; voting another option moves the vote.
+export async function votePoll(channelId, messageId, optionId, uid, currentVoteOptionId) {
+  if (!db) return;
+  const updates = {};
+  if (currentVoteOptionId && currentVoteOptionId !== optionId) {
+    updates[`poll/votes/${currentVoteOptionId}/${uid}`] = null;
+  }
+  updates[`poll/votes/${optionId}/${uid}`] = currentVoteOptionId === optionId ? null : true;
+  await update(ref(db, `messages/${channelId}/${messageId}`), updates);
+}
+
+// Typing indicators: write once when a typing burst starts, clear on idle/send,
+// and clear automatically when the tab closes via onDisconnect. Readers prune
+// stale entries client-side, so the writer never has to poll.
+const typingDisconnectRegistered = new Set();
+
+export async function setTyping(channelId, uid, displayName) {
+  if (!db) return;
+  const typingRef = ref(db, `typing/${channelId}/${uid}`);
+  const key = `${channelId}:${uid}`;
+  if (!typingDisconnectRegistered.has(key)) {
+    typingDisconnectRegistered.add(key);
+    onDisconnect(typingRef).set(null);
+  }
+  await set(typingRef, { name: displayName || 'User', startedAt: Date.now() });
+}
+
+export async function clearTyping(channelId, uid) {
+  if (!db) return;
+  await set(ref(db, `typing/${channelId}/${uid}`), null);
+}
+
+export function subscribeToTyping(channelId, callback, onError) {
+  if (!db) return () => {};
+  return onValue(ref(db, `typing/${channelId}`), snapshot => {
+    callback(snapshot.val() || {});
+  }, error => {
+    console.warn('Typing subscription error:', error);
+    onError?.(error);
+  });
+}
+
+export async function getSingleMessage(channelId, messageId) {
+  if (!db || !channelId || !messageId) return null;
+  const snapshot = await get(ref(db, `messages/${channelId}/${messageId}`));
+  return snapshot.exists() ? { id: messageId, ...snapshot.val() } : null;
+}
+
+// Full-text search within a channel: instant results from the session cache,
+// widened by one bounded fetch of the 500 most recent messages (no live
+// subscription, so it costs nothing when idle). Sorted by push ID for stability.
+export async function searchChannelMessages(channelId, query) {
+  if (!db) return [];
+  const normalized = String(query || '').trim().toLowerCase();
+  if (!normalized) return [];
+  const cached = getCachedMessages(channelId);
+  let fresh = [];
+  try {
+    const snapshot = await get(rtdbQuery(ref(db, `messages/${channelId}`), orderByChild('timestamp'), limitToLast(500)));
+    if (snapshot.exists()) {
+      fresh = Object.entries(snapshot.val()).map(([id, message]) => ({ id, ...message }));
+    }
+  } catch (error) {
+    console.warn('Search fetch failed:', error);
+  }
+  const merged = mergeMessagesById(fresh, cached);
+  return merged
+    .filter(message => message?.text?.toLowerCase().includes(normalized))
+    .slice(-60);
 }
 
 // Session-scoped cache of channel messages so reopening a channel does not re-read everything.
@@ -568,7 +685,11 @@ export async function getUnreadCounts(uid, communityIds = []) {
           rtdbQuery(ref(db, `messages/${channel.id}`), orderByChild('timestamp'), limitToLast(1))
         )))
         : [];
+      const userSnap = await getDoc(doc(firestore, 'users', uid));
+      const notificationPreferences = userSnap.exists() ? (userSnap.data().notificationPreferences || {}) : {};
       const unreadChannels = textChannels.filter((channel, index) => {
+        // Per-channel "nothing" mode suppresses the unread dot for that channel.
+        if (notificationPreferences.channelModes?.[channel.id] === 'none') return false;
         const lastReadTime = readResults[index].exists() ? readResults[index].data().timestamp : 0;
         const latestMessage = latestMessages[index]?.exists() ? Object.values(latestMessages[index].val() || {})[0] : null;
         const latestActivity = Math.max(channel.lastActivity || 0, latestMessage?.timestamp || 0);
@@ -752,17 +873,42 @@ export function subscribeToPrivateConversations(uid, callback, onError) {
 export function subscribeToPrivateMessages(conversationId, callback, onError) {
   if (!db) return () => {};
   const messagesRef = ref(db, `privateConversations/${conversationId}/messages`);
-  return onValue(messagesRef, snapshot => {
+  let unsubscribe = null;
+  let retryTimer = null;
+  let attempts = 0;
+  let active = true;
+  const listen = () => {
+    if (!active) return;
+    unsubscribe = onValue(messagesRef, snapshot => {
+      attempts = 0;
     const data = snapshot.val();
     const messages = data
       ? Object.entries(data).map(([id, message]) => ({ id, ...message }))
       : [];
     messages.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    callback(messages);
-  }, error => {
-    console.warn('Private messages subscription error:', error);
-    onError?.(error);
-  });
+      callback(messages);
+    }, error => {
+      if (!active) return;
+      // A newly-created PM is selected before its metadata write completes.
+      // Retry quietly until the conversation becomes readable instead of
+      // surfacing a transient permission_denied error to users.
+      if (error?.code === 'PERMISSION_DENIED' && attempts < 12) {
+        unsubscribe?.();
+        unsubscribe = null;
+        attempts += 1;
+        retryTimer = window.setTimeout(listen, 500);
+        return;
+      }
+      console.warn('Private messages subscription error:', error);
+      onError?.(error);
+    });
+  };
+  listen();
+  return () => {
+    active = false;
+    if (retryTimer) window.clearTimeout(retryTimer);
+    unsubscribe?.();
+  };
 }
 
 export async function sendPrivateMessage(conversationId, senderUid, recipientUid, text, participants = {}) {

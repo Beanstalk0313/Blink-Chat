@@ -1,0 +1,204 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.center {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #8b90a0;
+}
+
+.loader {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #4b8eff;
+  border-radius: 50%;
+  animation: loader-spin 1s linear infinite;
+}
+
+@keyframes loader-spin { to { transform: rotate(360deg); } }
+
+.content {
+  padding-bottom: 40px;
+}
+
+.card {
+  margin: 0 16px;
+  border-radius: 20px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.avatarWrap {
+  position: relative;
+  width: 5rem;
+  height: 5rem;
+}
+
+.avatar {
+  width: 5rem;
+  height: 5rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatarPlaceholder {
+  display: block;
+}
+
+.avatarEdit {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #4b8eff;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.avatarEdit .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.info h1 {
+  margin: 0;
+  font-size: 22px;
+  color: #f4f4f5;
+}
+
+.info p {
+  margin: 4px 0 0;
+  color: #8b90a0;
+  font-size: 13px;
+}
+
+.nameInput {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  /* Contain Framework7's tap ripple inside the button. Without position +
+     overflow the ripple anchors to a distant ancestor and its "pressed" wave
+     appears displaced above the profile card when the layout shifts into edit
+     mode. */
+  position: relative;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pmBlocked {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #8b90a0;
+  font-size: 14px;
+}
+
+.section h2 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+}
+
+.bio {
+  margin: 0;
+  color: #e4e2e4;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.section textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 15px;
+  padding: 12px;
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+}
+
+.stats {
+  display: flex;
+  gap: 12px;
+}
+
+.stats > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.stats strong {
+  font-size: 20px;
+  color: #f4f4f5;
+}
+
+.stats span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+}

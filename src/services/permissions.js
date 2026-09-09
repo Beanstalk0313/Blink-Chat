@@ -27,6 +27,7 @@ export function normalizeRole(role = {}) {
   return {
     name: role.name || 'Unnamed role',
     color: role.color || '#7dd3fc',
+    badge: role.badge || 'spark',
     permissions: Array.from(new Set((role.permissions || []).filter(permission => ALL_PERMISSIONS.includes(permission))))
   };
 }

@@ -23,6 +23,18 @@ import styles from './CommunitySettings.module.css';
 import ThemeSelect from '../components/common/ThemeSelect';
 import { useTheme } from '../contexts/ThemeContext';
 import { hasCommunityPermission, ROLE_PERMISSION_OPTIONS, normalizeRoleIds, buildMemberPermissions } from '../services/permissions';
+import { ROLE_BADGE_PRESETS } from '../services/roleBadges';
+
+const SLOW_MODE_OPTIONS = [
+  { label: 'Off', seconds: 0 },
+  { label: '5 seconds', seconds: 5 },
+  { label: '10 seconds', seconds: 10 },
+  { label: '30 seconds', seconds: 30 },
+  { label: '1 minute', seconds: 60 },
+  { label: '5 minutes', seconds: 300 },
+  { label: '15 minutes', seconds: 900 },
+  { label: '1 hour', seconds: 3600 }
+];
 
 const TIMEOUT_OPTIONS = [
   { label: '30 seconds', minutes: 0.5 },
@@ -64,16 +76,24 @@ export default function CommunitySettings() {
   const [newChannelName, setNewChannelName] = useState('');
   const [newChannelType, setNewChannelType] = useState('text');
   const [newChannelLocked, setNewChannelLocked] = useState(false);
+  const [newChannelSlowMode, setNewChannelSlowMode] = useState(0);
   const [newAllowedRoles, setNewAllowedRoles] = useState([]);
+  const [autoModProfanity, setAutoModProfanity] = useState(false);
+  const [autoModLinks, setAutoModLinks] = useState(false);
+  const [systemJoinEnabled, setSystemJoinEnabled] = useState(false);
+  const [systemLeaveEnabled, setSystemLeaveEnabled] = useState(false);
+  const [systemChannelId, setSystemChannelId] = useState('');
   const [editingChannel, setEditingChannel] = useState(null);
   const [editChannelName, setEditChannelName] = useState('');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleColor, setNewRoleColor] = useState('#7dd3fc');
   const [newRolePermissions, setNewRolePermissions] = useState([]);
+  const [newRoleBadge, setNewRoleBadge] = useState('spark');
   const [editingRoleId, setEditingRoleId] = useState(null);
   const [editRoleName, setEditRoleName] = useState('');
   const [editRoleColor, setEditRoleColor] = useState('#7dd3fc');
   const [editRolePermissions, setEditRolePermissions] = useState([]);
+  const [editRoleBadge, setEditRoleBadge] = useState('spark');
   const [adminError, setAdminError] = useState('');
   const [adminSaving, setAdminSaving] = useState(false);
 
@@ -120,6 +140,11 @@ export default function CommunitySettings() {
           setDescription(migratedCommunity.description || '');
           setIconBase64(migratedCommunity.iconBase64 || '');
           setInviteCode(migratedCommunity.inviteCode || '');
+          setAutoModProfanity(Boolean(migratedCommunity.autoMod?.profanity));
+          setAutoModLinks(Boolean(migratedCommunity.autoMod?.links));
+          setSystemJoinEnabled(Boolean(migratedCommunity.systemMessages?.joinEnabled));
+          setSystemLeaveEnabled(Boolean(migratedCommunity.systemMessages?.leaveEnabled));
+          setSystemChannelId(migratedCommunity.systemMessages?.channelId || '');
         }
         setChannels(chans);
         setMembers(mems);
@@ -167,7 +192,17 @@ export default function CommunitySettings() {
     setSaving(true);
     try {
       const updateData = {};
-      if (canManageCommunity) Object.assign(updateData, { name, description, iconBase64 });
+      if (canManageCommunity) Object.assign(updateData, {
+        name,
+        description,
+        iconBase64,
+        autoMod: { profanity: autoModProfanity, links: autoModLinks },
+        systemMessages: {
+          joinEnabled: systemJoinEnabled,
+          leaveEnabled: systemLeaveEnabled,
+          channelId: systemChannelId || ''
+        }
+      });
       if (canManageInvites && community.isPrivate) updateData.inviteCode = inviteCode;
       await updateCommunity(communityId, updateData);
       setModalType('success');
@@ -186,11 +221,13 @@ export default function CommunitySettings() {
     try {
       await createChannel(communityId, newChannelName, newChannelType, {
         isLocked: newChannelLocked,
+        slowModeSeconds: newChannelSlowMode,
         allowedRoles: newAllowedRoles
       });
       setNewChannelName('');
       setNewChannelType('text');
       setNewChannelLocked(false);
+      setNewChannelSlowMode(0);
       setNewAllowedRoles([]);
       const chans = await getChannels(communityId);
       setChannels(chans);
@@ -199,6 +236,13 @@ export default function CommunitySettings() {
     } finally {
       setAdminSaving(false);
     }
+  };
+
+  const handleAddAnnouncement = async () => {
+    const allowedRoles = Object.entries(community?.roles || {}).filter(([, role]) => (role.permissions || []).includes('manage_messages')).map(([id]) => id);
+    if (!allowedRoles.length) { setAdminError('Create a moderator role with Manage messages first.'); return; }
+    await createChannel(communityId, 'announcements', 'text', { isLocked: true, allowedRoles });
+    setChannels(await getChannels(communityId));
   };
 
   const handleRenameChannel = async (id) => {
@@ -366,7 +410,7 @@ export default function CommunitySettings() {
       let roleId = baseId;
       let suffix = 2;
       while (roles[roleId]) roleId = `${baseId}-${suffix++}`;
-      roles[roleId] = { name: trimmedName, color: newRoleColor, permissions: newRolePermissions };
+      roles[roleId] = { name: trimmedName, color: newRoleColor, badge: newRoleBadge, permissions: newRolePermissions };
       const memberPermissions = buildMemberPermissions(roles, community.memberRoles || {});
       await updateCommunity(communityId, { roles, memberPermissions });
       setCommunity(previous => ({ ...previous, roles, memberPermissions }));
@@ -384,7 +428,7 @@ export default function CommunitySettings() {
     setEditingRoleId(roleId);
     setEditRoleName(role.name || '');
     setEditRoleColor(role.color || '#7dd3fc');
-    setEditRolePermissions(role.permissions || []);
+    setEditRolePermissions(role.permissions || []); setEditRoleBadge(role.badge || 'spark');
   };
 
   const handleSaveRole = async roleId => {
@@ -394,7 +438,7 @@ export default function CommunitySettings() {
     setAdminError('');
     try {
       const roles = { ...(community.roles || {}) };
-      roles[roleId] = { ...roles[roleId], name: trimmedName, color: editRoleColor, permissions: editRolePermissions };
+      roles[roleId] = { ...roles[roleId], name: trimmedName, color: editRoleColor, badge: editRoleBadge, permissions: editRolePermissions };
       const memberPermissions = buildMemberPermissions(roles, community.memberRoles || {});
       await updateCommunity(communityId, { roles, memberPermissions });
       setCommunity(previous => ({ ...previous, roles, memberPermissions }));
@@ -527,6 +571,28 @@ export default function CommunitySettings() {
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
               </div>
 
+              {canManageCommunity && (
+                <>
+                  <div className={styles.inputGroup} style={{ marginTop: '1.5rem' }}>
+                    <label className="text-label-md">AUTO-MOD</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModProfanity} onChange={e => setAutoModProfanity(e.target.checked)} /> Block profanity</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModLinks} onChange={e => setAutoModLinks(e.target.checked)} /> Block links</label>
+                    <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>Messages that violate these filters are blocked from being sent.</p>
+                  </div>
+                  <div className={styles.inputGroup} style={{ marginTop: '1rem' }}>
+                    <label className="text-label-md">SYSTEM MESSAGES</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={systemJoinEnabled} onChange={e => setSystemJoinEnabled(e.target.checked)} /> Show when members join</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={systemLeaveEnabled} onChange={e => setSystemLeaveEnabled(e.target.checked)} /> Show when members leave</label>
+                    <label className="text-label-sm" style={{ marginTop: '0.5rem' }}>CHANNEL FOR SYSTEM MESSAGES</label>
+                    <select className={styles.modalInput} value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}>
+                      <option value="">None</option>
+                      {channels.filter(channel => channel.type !== 'voice').map(channel => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}
+                    </select>
+                    <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>Joined/left activity is posted to this channel when enabled.</p>
+                  </div>
+                </>
+              )}
+
               {canManageInvites && community?.isPrivate && (
                 <div className={styles.inputGroup}>
                   <label className="text-label-md">INVITE CODE</label>
@@ -584,7 +650,11 @@ export default function CommunitySettings() {
               <label className={styles.policyToggle}>
                 <input type="checkbox" checked={newChannelLocked} onChange={e => setNewChannelLocked(e.target.checked)} />
                 Locked
-              </label>                    <div className={styles.channelRolePicker} aria-label="Allowed roles for new channel">
+              </label>
+              <select className={styles.slowModeSelect} value={newChannelSlowMode} onChange={e => setNewChannelSlowMode(Number(e.target.value))} title="Slow mode">
+                {SLOW_MODE_OPTIONS.map(option => <option key={option.seconds} value={option.seconds}>Slow mode: {option.label}</option>)}
+              </select>
+              <div className={styles.channelRolePicker} aria-label="Allowed roles for new channel">
                       <span className={styles.pickerLabel}>ACCESS</span>
                       <div className={styles.roleCheckboxes}>
                         {roleEntries.map(([roleId, role]) => <label className={`${styles.roleCheckbox} ${newAllowedRoles.includes(roleId) ? styles.checked : ''}`} key={roleId}><input type="checkbox" checked={newAllowedRoles.includes(roleId)} onChange={event => setNewAllowedRoles(previous => event.target.checked ? [...new Set([...previous, roleId])] : previous.filter(id => id !== roleId))} /><span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span></label>)}
@@ -594,6 +664,7 @@ export default function CommunitySettings() {
                     </div>
               <button type="submit" disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'add'}</span>{adminSaving ? 'Adding...' : 'Add channel'}</button>
             </form>
+            <button type="button" className={styles.secondaryAction} onClick={handleAddAnnouncement}>Add announcement channel preset</button>
 
             <div className={styles.channelList}>
               {channels.map(chan => (
@@ -623,6 +694,9 @@ export default function CommunitySettings() {
                       <input type="checkbox" checked={Boolean(chan.isLocked)} onChange={e => handleChannelPolicyChange(chan, { isLocked: e.target.checked })} />
                       Locked
                     </label>
+                    <select className={styles.slowModeSelect} value={Number(chan.slowModeSeconds) || 0} onChange={e => handleChannelPolicyChange(chan, { slowModeSeconds: Number(e.target.value) })} title="Slow mode">
+                      {SLOW_MODE_OPTIONS.map(option => <option key={option.seconds} value={option.seconds}>{option.label}</option>)}
+                    </select>
                     <div className={styles.channelRolePicker} aria-label={`Allowed roles for ${chan.name}`}>
                       <span className={styles.pickerLabel}>ACCESS</span>
                       <div className={styles.roleCheckboxes}>
@@ -665,7 +739,7 @@ export default function CommunitySettings() {
               <div className={styles.formHeading}><svg className={styles.formHeadingIcon} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg><div><strong>Create a role</strong><span>Use a clear name members will recognize.</span></div></div>
               <div className={styles.roleFormGrid}>
                 <label className={styles.fieldGroup}><span>ROLE NAME</span><input value={newRoleName} onChange={event => setNewRoleName(event.target.value)} placeholder="e.g. Event Host" maxLength={32} /></label>
-                <label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={newRoleColor} onChange={event => setNewRoleColor(event.target.value)} /></label>
+                <label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={newRoleColor} onChange={event => setNewRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><select value={newRoleBadge} onChange={event => setNewRoleBadge(event.target.value)}>{ROLE_BADGE_PRESETS.map(badge => <option key={badge} value={badge}>{badge}</option>)}</select></label>
               </div>
               <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={newRolePermissions.includes(permission.id)} onChange={event => setNewRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
               <button type="submit" className={styles.primaryAction} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'add'}</span>{adminSaving ? 'Creating...' : 'Create role'}</button>
@@ -683,7 +757,7 @@ export default function CommunitySettings() {
                   </div>
                   {editingRoleId === roleId ? (
                     <div className={styles.roleEditor}>
-                      <div className={styles.roleFormGrid}><label className={styles.fieldGroup}><span>ROLE NAME</span><input value={editRoleName} onChange={event => setEditRoleName(event.target.value)} /></label><label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={editRoleColor} onChange={event => setEditRoleColor(event.target.value)} /></label></div>
+                      <div className={styles.roleFormGrid}><label className={styles.fieldGroup}><span>ROLE NAME</span><input value={editRoleName} onChange={event => setEditRoleName(event.target.value)} /></label><label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={editRoleColor} onChange={event => setEditRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><select value={editRoleBadge} onChange={event => setEditRoleBadge(event.target.value)}>{ROLE_BADGE_PRESETS.map(badge => <option key={badge} value={badge}>{badge}</option>)}</select></label></div>
                       <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={editRolePermissions.includes(permission.id)} onChange={event => setEditRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
                       <div className={styles.editorActions}><button type="button" className={styles.secondaryAction} onClick={() => setEditingRoleId(null)}>Cancel</button><button type="button" className={styles.primaryAction} onClick={() => handleSaveRole(roleId)} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'save'}</span>{adminSaving ? 'Saving...' : 'Save role'}</button></div>
                     </div>

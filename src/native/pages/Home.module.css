@@ -1,0 +1,183 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.hello {
+  color: #8b90a0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.profileLink {
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: inherit;
+  transform: none !important;
+}
+
+/* iOS renders the large Navbar title (z-index 10) after the right slot in DOM
+   order, so the title ends up on top and swallows avatar clicks. Raise the
+   whole right slot above the title so the avatar stays tappable in iOS. */
+.page :global(.navbar .right) {
+  z-index: 20;
+}
+
+.content {
+  padding-bottom: 32px;
+}
+
+.sectionTitle {
+  margin: 8px 20px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b90a0;
+}
+
+.loadingText {
+  margin: 0 20px;
+  color: #8b90a0;
+  font-size: 14px;
+}
+
+.groupCard {
+  margin: 0 16px 14px;
+  padding: 14px;
+  border-radius: 16px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.groupCard h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #adc6ff;
+}
+
+.channelRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e4e2e4;
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.channelRow:last-child {
+  margin-bottom: 0;
+}
+
+.channelRow .material-symbols-outlined {
+  color: #8b90a0;
+}
+
+.channelName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  background: #4b8eff;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+
+.empty {
+  margin: 0 16px;
+  padding: 32px 16px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  text-align: center;
+  color: #8b90a0;
+}
+
+.empty .material-symbols-outlined {
+  font-size: 36px;
+  color: #4b8eff;
+}
+
+.discoverBtn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: #4b8eff;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.commGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  padding: 0 16px;
+}
+
+.commCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 8px;
+  border-radius: 16px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #e4e2e4;
+  text-decoration: none;
+  text-align: center;
+}
+
+.commIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.commFallback {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 20px;
+  color: #fff;
+}
+
+.commName {
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.commUnread {
+  font-size: 11px;
+  color: #adc6ff;
+}

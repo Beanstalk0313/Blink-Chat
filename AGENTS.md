@@ -1,3 +1,12 @@
+# AI AGENT EXECUTION GUARDRAIL
+
+## Execution Speed & Scope Constraints
+- **PRIORITIZE SPEED OVER PERFECT PLANNING:** Aim to apply file changes within 2–3 turns max.
+- **DO NOT INVOKE HEAVY SUBAGENTS:** Unless explicitly requested by the user, DO NOT spawn `planner`, `file-picker`, `code-reviewer`, `browser-use`, or `web-research` subagents.
+- **NO DEEP REPO SEARCHES:** Do not scan the entire codebase or read unrelated files. Use the Repository Map in Section 2 to locate target files immediately.
+- **SINGLE-FILE DIRECT EDITS:** Write fixes directly to disk using `apply_patch`. Do not write multi-step dry-run summaries or `/plan` documents before editing.
+
+
 # Blink Chat Agent Guide
 
 This file is the repository-level operating guide for AI agents and other automated contributors working on Blink Chat. Read it before making changes. It describes the current architecture, important data invariants, Firebase rules, known platform limitations, validation commands, and project-specific ways to avoid regressions.
@@ -120,6 +129,17 @@ VITE_FIREBASE_MEASUREMENT_ID
 Do not commit `.env`, credentials, service-account JSON, private keys, or user data. Firebase web configuration values are not treated as secrets, but authentication and authorization are enforced by Firebase rules, not by hiding client configuration.
 
 If Firebase is unavailable or incompletely configured, the application is expected to fail gracefully where possible. Keep the existing startup and application error boundaries useful rather than allowing an obscure null-reference failure to replace them.
+
+### `.env` handling rules (important)
+
+- `.env` holds the user’s real Firebase configuration and is owned by the user. **Do NOT edit `.env`.** The user inputs the values themselves.
+- **Do NOT read the contents of `.env`.** If you absolutely must read it, STOP and ask the user for explicit permission first; never read it without that consent.
+- When a task needs dummy credentials for local dev/preview, use the `.env-agent` swap workflow instead:
+  1. `.env-agent` mirrors `.env` (same `VITE_FIREBASE_*` keys) but with placeholder/dummy values.
+  2. To switch to dummy values: rename `.env` → `.env-backup`, then rename `.env-agent` → `.env`.
+  3. When finished with dummy values, restore: rename `.env` → `.env-agent`, then rename `.env-backup` → `.env`.
+  - Never leave the files swapped at the end of a turn; always restore the real `.env` before handing off.
+- `.env`, `.env-agent`, and `.env-backup` are all gitignored and must never be committed.
 
 ## 5. Firebase architecture and boundaries
 

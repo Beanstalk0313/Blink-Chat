@@ -1,0 +1,167 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.content {
+  padding-bottom: 40px;
+}
+
+.card {
+  margin: 0 16px;
+  border-radius: 20px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.icon {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  object-fit: cover;
+}
+
+.iconFallback {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #4b8eff, #7d01b1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.iconFallback .material-symbols-outlined {
+  font-size: 34px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 20px;
+  color: #f4f4f5;
+}
+
+.header p {
+  margin: 0;
+  color: #8b90a0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.joinHint {
+  margin: 0;
+  color: #8b90a0;
+  font-size: 13px;
+  text-align: center;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+  font-weight: 600;
+}
+
+.field input {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.joinBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.joinBtn:disabled {
+  opacity: 0.6;
+}
+
+.error {
+  margin: 0;
+  color: #ff8a80;
+  font-size: 13px;
+  text-align: center;
+}
+
+.authForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.authForm input {
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.authForm button[type='submit'] {
+  padding: 12px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modeBtn {
+  background: transparent;
+  border: 0;
+  color: #adc6ff;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}

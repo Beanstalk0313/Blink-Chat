@@ -9,21 +9,30 @@ import {
   getCachedMessages,
   getChannels,
   getCommunity,
+  getSingleMessage,
   sendMessage,
   subscribeToCommunityMembers,
   subscribeToMessages,
   subscribeToCommunityPresence,
   subscribeToVoiceParticipants,
+  subscribeToTyping,
+  setTyping,
+  clearTyping,
+  searchChannelMessages,
+  setChannelNotificationMode,
   joinVoiceChannel,
   reorderChannels,
   togglePinCommunity,
   togglePinMessage,
+  toggleReaction,
+  votePoll,
   updateLastRead,
   setCommunityMuted,
   leaveCommunity
 } from '../../services/db';
 import { uploadFile } from '../../services/upload';
-import { mentionsUser } from '../../services/utils';
+import { mentionsUser, filterCommunityMessage } from '../../services/utils';
+import { renderRichText } from '../../services/richText';
 import { useCall } from '../../contexts/CallContext';
 import UserAvatar from '../common/UserAvatar';
 import ProfilePopover from '../common/ProfilePopover';
@@ -32,6 +41,9 @@ import CommunityBannedScreen from '../common/CommunityBannedScreen';
 import styles from './ChatArea.module.css';
 import { getMemberPermissions } from '../../services/permissions';
 import AppErrorScreen from '../common/AppErrorScreen';
+import GameMessage from './GameMessage';
+import RoleBadge from '../common/RoleBadge';
+import { primaryRoleForMember } from '../../services/roleBadges';
 
 class ChatAreaErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
@@ -96,6 +108,18 @@ function collectMentionRanges(text, members, channels, roles) {
 const communityCache = new Map();
 const channelsCache = new Map();
 
+const EMOJI_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
+
+function mergeMessagesById(...groups) {
+  const byId = new Map();
+  for (const group of groups) {
+    for (const message of group) {
+      if (message && message.id) byId.set(message.id, message);
+    }
+  }
+  return [...byId.values()].sort((first, second) => String(first.id).localeCompare(String(second.id)));
+}
+
 function ChatAreaContent() {
   const { communityId, channelId } = useParams();
   const { currentUser } = useAuth();
@@ -111,8 +135,19 @@ function ChatAreaContent() {
   const [animatedMessageIds, setAnimatedMessageIds] = useState(() => new Set());
   const [messageLimit, setMessageLimit] = useState(25);
   const [newMessage, setNewMessage] = useState('');
-  const [authorSearch, setAuthorSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchFetching, setIsSearchFetching] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [typingUsers, setTypingUsers] = useState({});
+  const [reactionMenuFor, setReactionMenuFor] = useState(null);
+  const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
+  const [isPollOpen, setIsPollOpen] = useState(false);
+  const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
   const [mentionQuery, setMentionQuery] = useState(null);
   const [selectedProfile, setSelectedProfile] = useState(null);
   const [pinnedMessages, setPinnedMessages] = useState([]);
@@ -140,6 +175,11 @@ function ChatAreaContent() {
   const messagesEndRef = useRef(null);
   const messageInputRef = useRef(null);
   const composerTextLayerRef = useRef(null);
+  const searchQueryRef = useRef('');
+  const searchTimerRef = useRef(null);
+  const typingTimerRef = useRef(null);
+  const typingActiveRef = useRef(false);
+  const notifMenuRef = useRef(null);
   const initialLoad = useRef(true);
   const previousMessageCount = useRef(0);
   const seenMessageIds = useRef(new Set());
@@ -191,7 +231,17 @@ function ChatAreaContent() {
 
   const timeoutExpires = community?.timedOutUsers?.[currentUser?.uid] || 0;
   const isTimedOut = timeoutExpires > now;
-  const canSend = currentChannel?.type !== 'voice' && !isTimedOut && !currentChannel?.isLocked && (
+  const slowModeSeconds = Number(currentChannel?.slowModeSeconds) || 0;
+  const slowModeRemaining = (() => {
+    if (!slowModeSeconds || !currentUid) return 0;
+    try {
+      const lastSent = Number(window.localStorage.getItem(`blink-slowmode-${channelId}`)) || 0;
+      return Math.max(0, lastSent + slowModeSeconds * 1000 - now);
+    } catch {
+      return 0;
+    }
+  })();
+  const canSend = currentChannel?.type !== 'voice' && !isTimedOut && !currentChannel?.isLocked && slowModeRemaining <= 0 && (
     !currentChannel?.allowedRoles?.length || currentChannel.allowedRoles.some(allowedRole => roleIds.includes(allowedRole)) || canManageChannels
   );
 
@@ -264,6 +314,13 @@ function ChatAreaContent() {
     setAnimatedMessageIds(new Set());
     setEditingMessageId(null);
     setMentionQuery(null);
+    setReplyingTo(null);
+    setReactionMenuFor(null);
+    setIsNotifMenuOpen(false);
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setTypingUsers({});
   }
   useEffect(() => {
     initialLoad.current = true;
@@ -273,6 +330,46 @@ function ChatAreaContent() {
     mountTime.current = Date.now();
     latestMessageTimestampRef.current = cachedMessages.reduce((latest, message) => Math.max(latest, Number(message.timestamp) || 0), 0);
   }, [channelId]);
+
+  useEffect(() => {
+    if (!channelId || !currentUser?.uid) return undefined;
+    return subscribeToTyping(channelId, setTypingUsers);
+  }, [channelId, currentUser?.uid]);
+
+  // Readers prune stale typing entries client-side, so a writer that died mid-
+  // burst (or whose onDisconnect never fired) disappears after ~8 seconds.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setTypingUsers(previous => {
+        const cutoff = Date.now() - 8000;
+        const next = {};
+        let changed = false;
+        Object.entries(previous).forEach(([uid, entry]) => {
+          if (Number(entry?.startedAt || 0) > cutoff) next[uid] = entry;
+          else changed = true;
+        });
+        return changed ? next : previous;
+      });
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Clear the user's own typing entry when leaving the channel or unmounting.
+  useEffect(() => () => {
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    if (typingActiveRef.current && channelId && currentUser?.uid) {
+      clearTyping(channelId, currentUser.uid).catch(() => {});
+    }
+  }, [channelId, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!isNotifMenuOpen) return undefined;
+    const handleDocumentClick = event => {
+      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target)) setIsNotifMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', handleDocumentClick);
+    return () => document.removeEventListener('pointerdown', handleDocumentClick);
+  }, [isNotifMenuOpen]);
 
   useEffect(() => {
     if (!channelId || !currentUser?.uid) return undefined;
@@ -310,7 +407,7 @@ function ChatAreaContent() {
 
       const newIncomingMessage = newlyArrived.find(message => message.authorUid !== currentUser.uid);
 
-      if (newIncomingMessage && !isMuted && !communityMuted) {
+      if (newIncomingMessage && !newIncomingMessage.system && !isMuted && !communityMuted) {
         const isFresh = !newIncomingMessage.timestamp || newIncomingMessage.timestamp >= (mountTime.current - 5000);
         if (isFresh) {
           const displayName = currentUserDisplayName;
@@ -413,18 +510,174 @@ function ChatAreaContent() {
     });
   };
 
-  const handleSendMessage = async event => {
-    event.preventDefault();
-    if (!canSend || (!newMessage.trim() && !pendingAttachment) || !channelId) return;
+  // Shared send path: auto-mod gate, slow-mode cooldown bookkeeping, typing
+  // cleanup, and optional replyTo/poll payloads.
+  const performSend = async (text, attachmentValue, options = {}) => {
+    if (!channelId) return false;
+    const modResult = filterCommunityMessage(text, community);
+    if (modResult.blocked) {
+      setSendError(modResult.reason);
+      return false;
+    }
     setSendError('');
     try {
-      await sendMessage(channelId, newMessage, currentUser.uid, pendingAttachment || undefined);
+      await sendMessage(channelId, text, currentUser.uid, attachmentValue || undefined, options);
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false;
+        clearTyping(channelId, currentUser.uid).catch(() => {});
+      }
+      if (typingTimerRef.current) {
+        window.clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      if (slowModeSeconds > 0) {
+        try {
+          // eslint-disable-next-line react-hooks/purity
+          window.localStorage.setItem(`blink-slowmode-${channelId}`, String(Date.now()));
+        } catch {
+          // Storage unavailable: slow mode simply won't persist across reloads.
+        }
+        // eslint-disable-next-line react-hooks/purity
+        setNow(Date.now());
+      }
       setNewMessage('');
       setPendingAttachment(null);
       setMentionQuery(null);
+      setReplyingTo(null);
+      return true;
     } catch (error) {
       setSendError(error?.message || 'Message could not be sent. Please try again.');
+      return false;
     }
+  };
+
+  const handleSendMessage = async event => {
+    event.preventDefault();
+    if (!canSend || (!newMessage.trim() && !pendingAttachment)) return;
+    await performSend(newMessage, pendingAttachment, { replyTo: replyingTo || undefined });
+  };
+
+  const handleComposerChange = value => {
+    setNewMessage(value);
+    setSendError('');
+    const match = value.match(/(?:^|\s)([@#])([^\s@#]*)$/);
+    setMentionQuery(match ? { trigger: match[1], query: match[2] } : null);
+    if (!channelId || !currentUser?.uid) return;
+    if (!value.trim()) {
+      if (typingActiveRef.current) {
+        typingActiveRef.current = false;
+        clearTyping(channelId, currentUser.uid).catch(() => {});
+      }
+      if (typingTimerRef.current) {
+        window.clearTimeout(typingTimerRef.current);
+        typingTimerRef.current = null;
+      }
+      return;
+    }
+    // Write the typing marker once per burst (not per keystroke) and clear it
+    // after 3s of inactivity: at most two RTDB calls per typing burst.
+    if (!typingActiveRef.current) {
+      typingActiveRef.current = true;
+      setTyping(channelId, currentUser.uid, currentUser?.profile?.displayName || 'User').catch(() => {});
+    }
+    if (typingTimerRef.current) window.clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = window.setTimeout(() => {
+      typingActiveRef.current = false;
+      clearTyping(channelId, currentUser.uid).catch(() => {});
+    }, 3000);
+  };
+
+  const runSearch = async query => {
+    const normalized = String(query || '').trim().toLowerCase();
+    if (!normalized) {
+      setSearchResults([]);
+      setIsSearchFetching(false);
+      return;
+    }
+    // Instant results from the session cache, then widen with one bounded fetch.
+    setSearchResults(getCachedMessages(channelId)
+      .filter(message => message?.text?.toLowerCase().includes(normalized))
+      .slice(-60));
+    setIsSearchFetching(true);
+    try {
+      const results = await searchChannelMessages(channelId, query);
+      if (searchQueryRef.current === query) setSearchResults(results);
+    } finally {
+      if (searchQueryRef.current === query) setIsSearchFetching(false);
+    }
+  };
+
+  const handleSearchChange = event => {
+    const value = event.target.value;
+    setSearchQuery(value);
+    searchQueryRef.current = value;
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = window.setTimeout(() => runSearch(value), 250);
+  };
+
+  const jumpToMessage = async messageId => {
+    if (!messageId || !channelId) return;
+    setHighlightedMessageId(null);
+    let target = messages.find(message => message.id === messageId);
+    if (!target) {
+      try {
+        const single = await getSingleMessage(channelId, messageId);
+        if (single) {
+          target = single;
+          setMessages(previous => mergeMessagesById(previous, [single]));
+        }
+      } catch {
+        // Not found or offline: fall through to the empty state below.
+      }
+    }
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    if (!target) return;
+    window.setTimeout(() => {
+      const element = document.getElementById(`blink-msg-${messageId}`);
+      if (!element) return;
+      element.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      setHighlightedMessageId(messageId);
+      window.setTimeout(() => setHighlightedMessageId(current => (current === messageId ? null : current)), 2500);
+    }, 80);
+  };
+
+  const handleNotificationModeChange = async mode => {
+    setIsNotifMenuOpen(false);
+    try {
+      await setChannelNotificationMode(currentUser.uid, channelId, mode);
+    } catch (error) {
+      setSendError(error?.message || 'Notification setting could not be saved.');
+    }
+  };
+
+  const handleCreatePoll = async () => {
+    const question = pollQuestion.trim();
+    const optionTexts = pollOptions.map(text => text.trim()).filter(Boolean);
+    if (!question || optionTexts.length < 2) {
+      setSendError('A poll needs a question and at least two options.');
+      return;
+    }
+    const options = optionTexts.slice(0, 6).map((text, index) => ({ id: String.fromCharCode(97 + index), text }));
+    const sent = await performSend('', null, { poll: { question, options } });
+    if (sent) {
+      setIsPollOpen(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+    }
+  };
+
+  const startGame = () => {
+    const opponents = activeMembers.filter(member => member.uid !== currentUid);
+    if (!opponents.length) { setSendError('Invite another member before starting a two-player game.'); return; }
+    const opponentList = opponents.slice(0, 12).map((member, index) => `${index + 1}. ${member.displayName}`).join('\n');
+    const opponentChoice = Number(window.prompt(`Choose an opponent:\n${opponentList}`, '1')) - 1;
+    const opponent = opponents[opponentChoice];
+    if (!opponent) return;
+    const choice = window.prompt('Choose a game: ticTacToe, connectFour, checkers, or chess', 'ticTacToe');
+    const type = String(choice || '').trim();
+    if (['ticTacToe', 'connectFour', 'checkers', 'chess'].includes(type)) performSend('', null, { game: { type, opponentUid: opponent.uid, opponentName: opponent.displayName || 'Member' } });
   };
 
   const handleFileUpload = async event => {
@@ -586,47 +839,70 @@ function ChatAreaContent() {
     displayName: message.authorName || 'User',
     avatarBase64: message.authorAvatar
   };
-  const visibleMessages = messages.filter(message => {
-    if (!authorSearch.trim()) return true;
-    return authorFor(message).displayName?.toLowerCase().includes(authorSearch.trim().toLowerCase());
-  });
+  const visibleMessages = messages;
 
-  const renderMessageText = (text, messageId, plain = false) => {
-    if (!text) return null;
-    const ranges = collectMentionRanges(text, members, channels, community?.roles || {});
-    if (!ranges.length) return text;
-    const nodes = [];
-    let cursor = 0;
-    ranges.forEach((range, rangeIndex) => {
-      if (range.start > cursor) nodes.push(text.slice(cursor, range.start));
-      const label = text.slice(range.start, range.end);
-      const key = `${messageId}:mention:${rangeIndex}`;
-      if (plain) {
-        nodes.push(<span key={key} className={styles.composerMention}>{label}</span>);
-        cursor = range.end;
-        return;
-      }
-      if (range.kind === 'user' && range.user?.uid) {
-        nodes.push(
-          <button key={key} type="button" data-profile-trigger className={styles.userMention} title={`Open ${range.user.displayName || 'user'} profile`} onClick={() => messageId === 'draft' ? navigate(`/profile/${range.user.uid}`) : setSelectedProfile(previous => previous?.messageId === messageId && previous?.user?.uid === range.user.uid ? null : { messageId, user: range.user })}>{label}</button>
-        );
-      } else if (range.kind === 'channel' && range.channel?.id) {
-        nodes.push(
-          <Link key={key} to={`/channels/${communityId}/${range.channel.id}`} className={styles.channelMention} onClick={() => window.innerWidth <= 1024 && setIsSidebarOpen(false)}>{label}</Link>
-        );
-      } else if (range.kind === 'everyone') {
-        nodes.push(<span key={key} className={styles.everyoneMention}>{label}</span>);
-      } else if (range.kind === 'role' && range.role) {
-        nodes.push(<span key={key} className={styles.roleMention} style={range.role.color ? { color: range.role.color } : undefined}>{label}</span>);
-      } else {
-        nodes.push(label);
-      }
-      cursor = range.end;
-    });
-    if (cursor < text.length) nodes.push(text.slice(cursor));
-    return nodes;
+  const formatMessageTime = timestamp => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    // Messages older than a day show the date too, so old messages are not
+    // mistaken for today's (e.g. "Sep 3, 2:30 PM" instead of "2:30 PM").
+    if (now - timestamp > 24 * 60 * 60 * 1000) {
+      return `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+    }
+    return time;
   };
+
+  const snippetFor = (text, query) => {
+    const haystack = String(text || '');
+    const needle = String(query || '').trim().toLowerCase();
+    const index = haystack.toLowerCase().indexOf(needle);
+    if (!needle || index < 0) return haystack;
+    const start = Math.max(0, index - 30);
+    const end = Math.min(haystack.length, index + needle.length + 30);
+    return <>{start > 0 ? '…' : ''}{haystack.slice(start, index)}<mark>{haystack.slice(index, index + needle.length)}</mark>{haystack.slice(index + needle.length, end)}{end < haystack.length ? '…' : ''}</>;
+  };
+
+  const renderMessageText = (text, messageId, plain = false) => renderRichText(text, {
+    plain,
+    members,
+    channels,
+    roles: community?.roles || {},
+    classNames: {
+      userMention: styles.userMention,
+      channelMention: styles.channelMention,
+      everyoneMention: styles.everyoneMention,
+      roleMention: styles.roleMention,
+      plainMention: styles.composerMention,
+      link: styles.mdLink,
+      inlineCode: styles.mdInlineCode,
+      codeBlock: styles.mdCodeBlock,
+      codeBlockLang: styles.mdCodeBlockLang,
+      quote: styles.mdQuote,
+      heading: styles.mdHeading,
+      list: styles.mdList,
+      paragraph: styles.mdParagraph
+    },
+    onUserMention: user => {
+      if (messageId === 'draft') navigate(`/profile/${user.uid}`);
+      else setSelectedProfile(previous => previous?.messageId === messageId && previous?.user?.uid === user.uid ? null : { messageId, user });
+    },
+    channelHref: channel => `/channels/${communityId}/${channel.id}`,
+    onChannelMention: channel => {
+      if (window.innerWidth <= 1024) setIsSidebarOpen(false);
+      navigate(`/channels/${communityId}/${channel.id}`);
+    }
+  });
   const hasDraftMention = Boolean(newMessage && collectMentionRanges(newMessage, members, channels, community?.roles || {}).length);
+
+  const typingLabel = (() => {
+    const names = Object.values(typingUsers).map(entry => entry?.name).filter(Boolean);
+    if (!names.length) return '';
+    if (names.length === 1) return `${names[0]} is typing…`;
+    if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+    if (names.length === 3) return `${names[0]}, ${names[1]}, and ${names[2]} are typing…`;
+    return 'Several people are typing…';
+  })();
 
   if (!community) return <div className={styles.loadingContainer}><div className={styles.loader} /><p>Loading Blink...</p></div>;
   const banExpiration = community.bannedUsers?.[currentUser?.uid];
@@ -651,9 +927,30 @@ function ChatAreaContent() {
         <header className={styles.chatHeader}>
           <div className={styles.headerTitle}><button className={styles.menuToggle} onClick={() => setIsSidebarOpen(previous => !previous)} title="Open channels"><span className="material-symbols-outlined">menu</span></button><span className="material-symbols-outlined text-tertiary">{currentChannel?.type === 'voice' ? 'graphic_eq' : 'tag'}</span><h1>{currentChannel?.name || 'Channel'}</h1></div>
           <div className={styles.headerActions}>
-            <button className={`${styles.iconBtn} ${isMuted ? styles.active : ''}`} onClick={handleMuteToggle} title={isMuted ? 'Unmute community' : 'Mute community'}><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications'}</span></button>
-            <button className={`${styles.iconBtn} ${isSearchOpen ? styles.active : ''}`} onClick={() => setIsSearchOpen(previous => !previous)} title="Search messages"><span className="material-symbols-outlined">search</span></button>
-            {isSearchOpen && <input className={styles.headerSearch} value={authorSearch} onChange={event => setAuthorSearch(event.target.value)} placeholder="Search by author" aria-label="Search messages by author" />}
+            <div className={styles.notifMenuWrap} ref={notifMenuRef}>
+              <button className={`${styles.iconBtn} ${isNotifMenuOpen || isMuted ? styles.active : ''}`} onClick={() => setIsNotifMenuOpen(previous => !previous)} title="Notification settings"><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications'}</span></button>
+              {isNotifMenuOpen && <div className={styles.notifMenu}>
+                <p className="text-label-sm text-tertiary">NOTIFICATIONS FOR #{currentChannel?.name}</p>
+                {[{ mode: 'all', label: 'All messages' }, { mode: 'mentions', label: 'Mentions only' }, { mode: 'none', label: 'Nothing' }].map(option => (
+                  <button key={option.mode} type="button" className={`${styles.notifMenuOption} ${channelNotificationMode === option.mode ? styles.active : ''}`} onClick={() => handleNotificationModeChange(option.mode)}><span className="material-symbols-outlined">{channelNotificationMode === option.mode ? 'radio_button_checked' : 'radio_button_unchecked'}</span>{option.label}</button>
+                ))}
+                <div className={styles.notifMenuDivider} />
+                <button type="button" className={styles.notifMenuOption} onClick={handleMuteToggle}><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications_active'}</span>{isMuted ? 'Unmute entire community' : 'Mute entire community'}</button>
+              </div>}
+            </div>
+            <div className={styles.searchWrap}>
+              <button className={`${styles.iconBtn} ${isSearchOpen ? styles.active : ''}`} onClick={() => setIsSearchOpen(previous => !previous)} title="Search messages"><span className="material-symbols-outlined">search</span></button>
+              {isSearchOpen && <div className={styles.searchPanel}>
+                <input className={styles.headerSearch} value={searchQuery} onChange={handleSearchChange} placeholder="Search messages" aria-label="Search messages" autoFocus />
+                {isSearchFetching && <div className={styles.searchHint}><span className="material-symbols-outlined">progress_activity</span>Searching more messages…</div>}
+                <div className={styles.searchResults}>
+                  {searchResults.length ? searchResults.map(result => {
+                    const resultAuthor = authorFor(result);
+                    return <button key={result.id} type="button" className={styles.searchResult} onClick={() => jumpToMessage(result.id)}><UserAvatar user={resultAuthor} size="1.6rem" /><span className={styles.searchResultBody}><span className={styles.searchResultMeta}><strong>{resultAuthor.displayName}</strong><time>{formatMessageTime(result.timestamp)}</time></span><span className={styles.searchResultSnippet}>{snippetFor(result.text, searchQuery)}</span></span></button>;
+                  }) : searchQuery.trim() ? <p className={styles.searchHint}>No matches in this channel.</p> : <p className={styles.searchHint}>Search messages in #{currentChannel?.name || 'this channel'}.</p>}
+                </div>
+              </div>}
+            </div>
             <button className={`${styles.iconBtn} ${isPinnedMessagesOpen ? styles.active : ''}`} onClick={() => setIsPinnedMessagesOpen(true)} title="Pinned messages"><span className="material-symbols-outlined">push_pin</span></button>
             <button className={`${styles.iconBtn} ${isMemberListOpen ? styles.active : ''}`} onClick={() => setIsMemberListOpen(previous => !previous)} title="Members"><span className="material-symbols-outlined">group</span></button>
             {canOpenSettings && <Link to={`/community-settings/${communityId}`} className={styles.iconBtn} title="Community settings"><span className="material-symbols-outlined">settings</span></Link>}
@@ -666,23 +963,64 @@ function ChatAreaContent() {
             {visibleMessages.map(message => {
               const author = authorFor(message);
               const isMe = author.uid === currentUser.uid;
-              return <article key={message.id} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received} ${isMe && animatedMessageIds.has(message.id) ? styles.justSent : ''}`}>
+              if (message.system) {
+                return <div key={message.id} className={styles.systemMessage}><span className="material-symbols-outlined">campaign</span><span>{message.system === 'join' ? `${message.name || 'Someone'} joined the community` : `${message.name || 'Someone'} left the community`}</span><time>{formatMessageTime(message.timestamp)}</time></div>;
+              }
+              const reactions = Object.entries(message.reactions || {})
+                .filter(([, uids]) => uids && typeof uids === 'object' && Object.keys(uids).length > 0)
+                .map(([emoji, uids]) => ({ emoji, uids: Object.keys(uids) }));
+              const poll = message.poll ? { ...message.poll, options: Object.values(message.poll.options || {}) } : null;
+              const myVote = poll ? poll.options.find(option => option.id && poll.votes?.[option.id]?.[currentUid])?.id || null : null;
+              const pollTotal = poll ? [...new Set(poll.options.flatMap(option => Object.keys(poll.votes?.[option.id] || {})))].length : 0;
+              return <article key={message.id} id={`blink-msg-${message.id}`} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received} ${isMe && animatedMessageIds.has(message.id) ? styles.justSent : ''} ${highlightedMessageId === message.id ? styles.jumpHighlight : ''}`} onDoubleClick={() => { if (currentUid && !message.system) toggleReaction(channelId, message.id, '👍', currentUid, message.reactions?.['👍']?.[currentUid] === true).catch(() => {}); }}>
                 <button className={styles.messageAvatar} data-profile-trigger onClick={() => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author })} title={`Open ${author.displayName} profile`}><UserAvatar user={author} size="2.5rem" /></button>
                 {selectedProfile?.messageId === message.id && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} onClose={() => setSelectedProfile(null)} />}
                 <div className={styles.messageContent}>
-                  <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger onClick={() => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author })}>{author.displayName}</button><time>{message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</time><div className={styles.messageActions}>{isMe && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}{(isMe || canManageMessages) && <button className={styles.msgActionBtn} onClick={async () => { try { await deleteMessage(channelId, message.id); } catch (err) { console.error('Failed to delete message:', err); alert('Failed to delete message: ' + (err?.message || 'Permission denied')); } }} title="Delete message"><span className="material-symbols-outlined">delete</span></button>}{canManageMessages && <button className={styles.msgPinBtn} onClick={() => handlePinMessage(message.id, message.isPinned)} title="Pin message"><span className="material-symbols-outlined">push_pin</span></button>}</div></div>
-                  {editingMessageId === message.id ? <form className={styles.editForm} onSubmit={async event => { event.preventDefault(); await handleEditMessage(message.id, editingText); }}><input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus /><button type="submit">Save</button></form> : <>{message.text && <p className={styles.messageBubble}>{renderMessageText(message.text, message.id)}</p>}{(message.attachment || message.fileUrl) && <div className={styles.fileCard}><span className="material-symbols-outlined">description</span><span>{message.attachment?.name || message.fileName || 'Attachment'}</span><a href={message.attachment?.url || message.fileUrl} target="_blank" rel="noreferrer" title="Open attachment"><span className="material-symbols-outlined">download</span></a></div>}</>}
+                  <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined} onClick={() => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author })}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</button><time>{formatMessageTime(message.timestamp)}</time><div className={styles.messageActions}>
+                    <button className={styles.msgActionBtn} onClick={() => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })} title="Reply"><span className="material-symbols-outlined">reply</span></button>
+                    <button className={styles.msgActionBtn} onClick={() => setReactionMenuFor(reactionMenuFor === message.id ? null : message.id)} title="Add reaction"><span className="material-symbols-outlined">add_reaction</span></button>
+                    {isMe && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}
+                    {(isMe || canManageMessages) && <button className={styles.msgActionBtn} onClick={async () => { try { await deleteMessage(channelId, message.id); } catch (err) { console.error('Failed to delete message:', err); alert('Failed to delete message: ' + (err?.message || 'Permission denied')); } }} title="Delete message"><span className="material-symbols-outlined">delete</span></button>}
+                    {canManageMessages && <button className={styles.msgPinBtn} onClick={() => handlePinMessage(message.id, message.isPinned)} title="Pin message"><span className="material-symbols-outlined">push_pin</span></button>}
+                  </div></div>
+                  {editingMessageId === message.id ? <form className={styles.editForm} onSubmit={async event => { event.preventDefault(); await handleEditMessage(message.id, editingText); }}><input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus /><button type="submit">Save</button></form> : <>
+                    {message.replyTo && <button type="button" className={styles.replyQuote} onClick={() => jumpToMessage(message.replyTo.id)} title="Jump to message"><span className="material-symbols-outlined">format_quote</span><span className={styles.replyQuoteBody}><strong>{message.replyTo.authorName || 'User'}</strong><span>{message.replyTo.text || 'Attachment'}</span></span></button>}
+                    {message.text && <div className={styles.messageBubble}>{renderMessageText(message.text, message.id)}</div>}
+                    {message.game && <GameMessage message={{ ...message, channelId }} currentUid={currentUid} />}
+                    {poll && <div className={styles.pollCard}>
+                      <strong className={styles.pollQuestion}>{poll.question}</strong>
+                      <div className={styles.pollOptions}>
+                        {poll.options.map(option => {
+                          const optionVotes = option.id ? Object.keys(poll.votes?.[option.id] || {}) : [];
+                          const voted = optionVotes.includes(currentUid);
+                          const percentage = pollTotal ? Math.round((optionVotes.length / pollTotal) * 100) : 0;
+                          return <button key={option.id} type="button" className={`${styles.pollOption} ${voted ? styles.pollOptionVoted : ''}`} onClick={() => votePoll(channelId, message.id, option.id, currentUid, myVote).catch(() => {})}><span className={styles.pollOptionText}>{option.text}</span><span className={styles.pollOptionCount}>{optionVotes.length} · {percentage}%</span><span className={styles.pollBar} style={{ width: `${percentage}%` }} /></button>;
+                        })}
+                      </div>
+                      <small className={styles.pollMeta}>{pollTotal} {pollTotal === 1 ? 'vote' : 'votes'}</small>
+                    </div>}
+                    {(message.attachment || message.fileUrl) && <div className={styles.fileCard}><span className="material-symbols-outlined">description</span><span>{message.attachment?.name || message.fileName || 'Attachment'}</span><a href={message.attachment?.url || message.fileUrl} target="_blank" rel="noreferrer" title="Open attachment"><span className="material-symbols-outlined">download</span></a></div>}
+                    {reactionMenuFor === message.id && <div className={styles.reactionMenu}>{EMOJI_CHOICES.map(emoji => <button key={emoji} type="button" className={message.reactions?.[emoji]?.[currentUid] === true ? styles.reactionMenuActive : ''} onClick={() => { toggleReaction(channelId, message.id, emoji, currentUid, message.reactions?.[emoji]?.[currentUid] === true).catch(() => {}); setReactionMenuFor(null); }}>{emoji}</button>)}</div>}
+                    {reactions.length > 0 && <div className={styles.reactionRow}>{reactions.map(({ emoji, uids }) => <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(currentUid) ? styles.reactionChipActive : ''}`} title={uids.map(uid => authorFor({ authorUid: uid }).displayName).join(', ')} onClick={() => toggleReaction(channelId, message.id, emoji, currentUid, uids.includes(currentUid)).catch(() => {})}><span>{emoji}</span><span>{uids.length}</span></button>)}</div>}
+                  </>}
                 </div>
               </article>;
             })}
             <div ref={messagesEndRef} />
           </div>
-          <div className={styles.inputArea}>{sendError && <p className={styles.sendError} role="alert">{sendError}</p>}{pendingAttachment && <div className={styles.pendingAttachment}><span className="material-symbols-outlined">description</span><span>{pendingAttachment.name}</span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setPendingAttachment(null)} title="Remove attachment"><span className="material-symbols-outlined">close</span></button></div>}<form className={styles.inputContainer} onSubmit={handleSendMessage}><label className={styles.inputAction} title="Attach file"><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span><input type="file" hidden onChange={handleFileUpload} disabled={isUploading || !canSend} /></label><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend || isUploading} placeholder={canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => { const value = event.target.value; setNewMessage(value); setSendError(''); const match = value.match(/(?:^|\s)([@#])([^\s@#]*)$/); setMentionQuery(match ? { trigger: match[1], query: match[2] } : null); }} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form></div>
+          <div className={styles.inputArea}>
+            {sendError && <p className={styles.sendError} role="alert">{sendError}</p>}
+            {typingLabel && <div className={styles.typingIndicator}><span className={styles.typingDots}><i /><i /><i /></span><span>{typingLabel}</span></div>}
+            {replyingTo && <div className={styles.replyBar}><span className="material-symbols-outlined">reply</span><span className={styles.replyBarBody}><strong>Replying to {replyingTo.authorName}</strong><span>{replyingTo.text || 'Attachment'}</span></span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setReplyingTo(null)} title="Cancel reply"><span className="material-symbols-outlined">close</span></button></div>}
+            {pendingAttachment && <div className={styles.pendingAttachment}><span className="material-symbols-outlined">description</span><span>{pendingAttachment.name}</span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setPendingAttachment(null)} title="Remove attachment"><span className="material-symbols-outlined">close</span></button></div>}
+            <form className={styles.inputContainer} onSubmit={handleSendMessage}><div className={styles.composerActionMenu}>{isComposerMenuOpen && <div className={styles.composerFlyout}><label className={styles.composerFlyoutItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach File<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFileUpload(event); }} disabled={isUploading || !canSend} /></label><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsPollOpen(true); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); startGame(); }}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}<button type="button" className={styles.inputAction} onClick={() => setIsComposerMenuOpen(open => !open)} title="More composer actions" disabled={!canSend}><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button></div><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend || isUploading} placeholder={slowModeRemaining > 0 ? `Slow mode: ${Math.ceil(slowModeRemaining / 1000)}s left` : canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => handleComposerChange(event.target.value)} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form>
+          </div>
         </>}
       </section>
 
       {isMemberListOpen && <aside className={styles.memberListSidebar}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={() => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member }); }}><UserAvatar user={member} size="2rem" /><span>{member.displayName}</span><span className={`${styles.statusDot} ${presence[member.uid] ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
 
+      <Modal isOpen={isPollOpen} onClose={() => setIsPollOpen(false)} title="Create poll" footer={<><button className={styles.modalCancel} onClick={() => setIsPollOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreatePoll} disabled={!pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2}>Create poll</button></>}><div className={styles.modalInputGroup}><label>QUESTION</label><input className={styles.modalInput} value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} placeholder="What do you want to know?" autoFocus /><label>OPTIONS (2–6)</label>{pollOptions.map((option, index) => <div className={styles.pollOptionRow} key={index}><input className={styles.modalInput} value={option} onChange={event => setPollOptions(previous => previous.map((value, optionIndex) => optionIndex === index ? event.target.value : value))} placeholder={`Option ${index + 1}`} />{pollOptions.length > 2 && <button type="button" className={styles.removeAttachmentBtn} onClick={() => setPollOptions(previous => previous.filter((_, optionIndex) => optionIndex !== index))} title="Remove option"><span className="material-symbols-outlined">close</span></button>}</div>)}{pollOptions.length < 6 && <button type="button" className={styles.modalCancel} onClick={() => setPollOptions(previous => [...previous, ''])}>Add option</button>}</div></Modal>
       <Modal isOpen={isCreateChannelOpen} onClose={() => setIsCreateChannelOpen(false)} title="Create channel" footer={<><button className={styles.modalCancel} onClick={() => setIsCreateChannelOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreateChannel}>Create</button></>}><div className={styles.modalInputGroup}><label>CHANNEL NAME</label><input className={styles.modalInput} value={newChannelName} onChange={event => setNewChannelName(event.target.value)} autoFocus /><label>CHANNEL TYPE</label><select className={styles.modalInput} value={newChannelType} onChange={event => setNewChannelType(event.target.value)}><option value="text">Text</option><option value="voice">Voice</option></select></div></Modal>
       <Modal isOpen={isPinnedMessagesOpen} onClose={() => setIsPinnedMessagesOpen(false)} title="Pinned messages" footer={<button className={styles.modalConfirm} onClick={() => setIsPinnedMessagesOpen(false)}>Close</button>}><div className={styles.pinnedList}>{pinnedMessages.length ? pinnedMessages.map(message => <div className={styles.pinnedMsgItem} key={message.id}><strong>{authorFor(message).displayName}</strong><p>{message.text || 'Attachment'}</p></div>) : <p className="text-tertiary">No pinned messages in this channel.</p>}</div></Modal>
     </div>

@@ -9,7 +9,44 @@
         ".indexOn": ["timestamp"],
         "$messageId": {
           ".write": "auth != null && (!data.exists() || !newData.exists() || data.child('authorUid').val() === auth.uid || (newData.hasChild('isPinned') && newData.child('authorUid').val() === data.child('authorUid').val() && newData.child('timestamp').val() === data.child('timestamp').val() && (!data.hasChild('text') || newData.child('text').val() === data.child('text').val())))",
-          ".validate": "!newData.exists() || (newData.hasChildren(['authorUid', 'timestamp']) && newData.child('authorUid').isString() && newData.child('timestamp').isNumber() && (!data.exists() ? newData.child('authorUid').val() === auth.uid : newData.child('authorUid').val() === data.child('authorUid').val()) && (!newData.hasChild('text') || (newData.child('text').isString() && newData.child('text').val().length <= 2000)) && (!newData.hasChild('isPinned') || newData.child('isPinned').isBoolean()) && (!newData.hasChild('attachment') || (newData.child('attachment').hasChildren(['url', 'name']) && newData.child('attachment/url').isString() && newData.child('attachment/url').val().length <= 2048 && newData.child('attachment/name').isString() && newData.child('attachment/name').val().length <= 255 && newData.child('attachment/size').isNumber() && newData.child('attachment/size').val() <= 104857600)))"
+          ".validate": "!newData.exists() || (newData.hasChildren(['authorUid', 'timestamp']) && newData.child('authorUid').isString() && newData.child('timestamp').isNumber() && (!data.exists() ? newData.child('authorUid').val() === auth.uid : newData.child('authorUid').val() === data.child('authorUid').val()) && (!newData.hasChild('text') || (newData.child('text').isString() && newData.child('text').val().length <= 2000)) && (!newData.hasChild('isPinned') || newData.child('isPinned').isBoolean()) && (!newData.hasChild('system') || (newData.child('system').isString() && (newData.child('system').val() === 'join' || newData.child('system').val() === 'leave'))) && (!newData.hasChild('name') || (newData.child('name').isString() && newData.child('name').val().length <= 40)) && (!newData.hasChild('replyTo') || (newData.child('replyTo').hasChildren(['id']) && newData.child('replyTo/id').isString() && newData.child('replyTo/id').val().length <= 64 && (!newData.hasChild('replyTo/authorUid') || newData.child('replyTo/authorUid').isString()) && (!newData.hasChild('replyTo/authorName') || (newData.child('replyTo/authorName').isString() && newData.child('replyTo/authorName').val().length <= 40)) && (!newData.hasChild('replyTo/text') || (newData.child('replyTo/text').isString() && newData.child('replyTo/text').val().length <= 500)))) && (!newData.hasChild('poll') || (newData.hasChild('poll/question') && newData.child('poll/question').isString() && newData.child('poll/question').val().length > 0 && newData.child('poll/question').val().length <= 300 && newData.hasChild('poll/options') && newData.child('poll/options').val() != null)) && (!newData.hasChild('attachment') || (newData.child('attachment').hasChildren(['url', 'name']) && newData.child('attachment/url').isString() && newData.child('attachment/url').val().length <= 2048 && newData.child('attachment/name').isString() && newData.child('attachment/name').val().length <= 255 && newData.child('attachment/size').isNumber() && newData.child('attachment/size').val() <= 104857600)))"
+        },
+        "game": {
+          "moves": {
+            "$moveId": {
+              ".write": "auth != null && newData.child('uid').val() === auth.uid",
+              ".validate": "newData.hasChildren(['uid', 'cell', 'mark', 'timestamp']) && newData.child('uid').isString() && newData.child('cell').isNumber() && newData.child('cell').val() >= 0 && newData.child('cell').val() < 64 && newData.child('mark').isString() && newData.child('mark').val().length <= 1 && newData.child('timestamp').isNumber()"
+            }
+          }
+        },
+        "reactions": {
+          "$emoji": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid",
+              ".validate": "!newData.exists() || newData.isBoolean()"
+            }
+          }
+        },
+        "poll": {
+          "votes": {
+            "$optionId": {
+              "$uid": {
+                ".write": "auth != null && auth.uid === $uid",
+                ".validate": "!newData.exists() || newData.isBoolean()"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "typing": {
+      ".read": "auth != null",
+      "$channelId": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "!newData.exists() || (newData.hasChildren(['name', 'startedAt']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('startedAt').isNumber())"
         }
       }
     },

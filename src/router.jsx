@@ -11,13 +11,13 @@ const Login = lazyWithRecovery(() => import('./pages/Login'));
 const Communities = lazyWithRecovery(() => import('./pages/Communities'));
 const ChatArea = lazyWithRecovery(() => import('./components/chat/ChatArea'));
 const Discover = lazyWithRecovery(() => import('./pages/Discover'));
-const Admin = lazyWithRecovery(() => import('./pages/Admin'));
 const Profile = lazyWithRecovery(() => import('./pages/Profile'));
 const Settings = lazyWithRecovery(() => import('./pages/Settings'));
 const CreateCommunity = lazyWithRecovery(() => import('./pages/CreateCommunity'));
 const CommunitySettings = lazyWithRecovery(() => import('./pages/CommunitySettings'));
 const PrivateMessages = lazyWithRecovery(() => import('./pages/PrivateMessages'));
 const JoinCommunity = lazyWithRecovery(() => import('./pages/JoinCommunity'));
+const WhatsNew = lazyWithRecovery(() => import('./pages/WhatsNew'));
 
 const ProtectedRoute = ({ children }) => {
   const { currentUser, loading } = useAuth();
@@ -116,14 +116,6 @@ export const router = createBrowserRouter([
         ),
       },
       {
-        path: 'admin',
-        element: (
-          <Suspense fallback={<PageLoader />}>
-            <Admin />
-          </Suspense>
-        ),
-      },
-      {
         path: 'profile',
         element: (
           <Suspense fallback={<PageLoader />}>
@@ -160,6 +152,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <CommunitySettings />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'whats-new',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <WhatsNew />
           </Suspense>
         ),
       },

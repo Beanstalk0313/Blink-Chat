@@ -14,6 +14,8 @@ import styles from './AppLayout.module.css';
 import pkg from '../../../package.json';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getCommunity } from '../../services/db';
+import { checkAndMarkSeenVersion } from '../../version';
+import { useNavigate } from 'react-router-dom';
 
 // The call surface lives inside the main content column so it persists across
 // every route but is clipped to the app's chrome. Keyed per call session so a
@@ -29,9 +31,16 @@ function CallWindow() {
 const AppLayout = () => {
   const { currentUser } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const currentVersion = pkg.version;
   const { applyTheme } = useTheme();
+
+  // "What's new": on the first run of every new version, open the changelog
+  // once (same behavior as Blink Native).
+  useEffect(() => {
+    if (checkAndMarkSeenVersion()) navigate('/whats-new', { replace: false });
+  }, [navigate]);
 
   useEffect(() => {
     if (!firestore) return undefined;

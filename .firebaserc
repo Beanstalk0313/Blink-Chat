@@ -1,5 +1,17 @@
 {
   "projects": {
     "default": "blink-chat-313"
+  },
+  "targets": {
+    "blink-chat-313": {
+      "hosting": {
+        "base": [
+          "blink-chat-313"
+        ],
+        "blink-native": [
+          "blink-native"
+        ]
+      }
+    }
   }
 }

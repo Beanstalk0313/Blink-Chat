@@ -1,0 +1,103 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.loading {
+  margin: 24px 20px;
+  color: #8b90a0;
+}
+
+.card {
+  margin: 0 16px 14px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.iconFallback {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4b8eff, #7d01b1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.titleBlock strong {
+  font-size: 16px;
+  color: #f4f4f5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.titleBlock small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.description {
+  margin: 10px 0 12px;
+  color: #c1c6d7;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.joinBtn {
+  flex: 1;
+  padding: 11px;
+  border: 0;
+  border-radius: 12px;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shareBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: transparent;
+  color: #c1c6d7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.empty {
+  margin: 32px 16px;
+  text-align: center;
+  color: #8b90a0;
+}

@@ -1,0 +1,306 @@
+.page {
+  --f7-page-bg-color: #131315;
+  --f7-navbar-bg-color: rgba(24, 24, 26, 0.92);
+}
+
+/* Conversation switcher (in-page sheet) */
+.switcherBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 7000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+}
+
+.switcher {
+  width: 100%;
+  max-height: 78vh;
+  border-radius: 20px 20px 0 0;
+  background: #1f1f21;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 14px 14px calc(16px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.switcherHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.switcherHead strong {
+  color: #f4f4f5;
+  font-size: 16px;
+}
+
+.switcherHead button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  cursor: pointer;
+}
+
+.switcherList {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panelHeader {
+  padding: calc(14px + env(safe-area-inset-top)) 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.panelHeader strong {
+  font-size: 16px;
+  color: #f4f4f5;
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  color: #8b90a0;
+}
+
+.searchBox input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #f4f4f5;
+  font-size: 15px;
+}
+
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.searchResults button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e4e2e4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversationList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.conversationItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: #e4e2e4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.conversationItem.active {
+  background: rgba(75, 142, 255, 0.14);
+}
+
+.avatarWrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.statusDot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid #131315;
+}
+
+.statusDot.online { background: #4caf50; }
+.statusDot.offline { background: #8b90a0; }
+
+.conversationInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.conversationInfo strong,
+.conversationInfo small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversationInfo small {
+  color: #8b90a0;
+  font-size: 13px;
+}
+
+.unreadDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4b8eff;
+  flex-shrink: 0;
+}
+
+.emptyState {
+  padding: 18px 12px;
+  color: #8b90a0;
+  font-size: 14px;
+  text-align: center;
+}
+
+.messages {
+  --f7-messages-content-bg-color: #131315;
+}
+
+.deleteBtn {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  padding: 2px;
+  cursor: pointer;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.navIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--f7-bars-text-color, #f4f4f5);
+  cursor: pointer;
+}
+
+/* Press tint only on iOS (no ripple there); Android uses F7's ripple. */
+:global(html.ios) .navIconBtn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.navIconBtn .material-symbols-outlined {
+  font-size: 24px;
+}
+
+/* Messages scroll inside page-content; the composer is pinned to the page
+   bottom (see .composerWrap). Specificity must beat native.css's
+   .blink-native .page-content padding rule. */
+.page :global(.page-content).messageScroll {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom));
+}
+
+.composerWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  padding: 6px 0 calc(8px + env(safe-area-inset-bottom));
+  background: rgba(19, 19, 21, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px;
+  padding: 4px 6px 4px 14px;
+  border-radius: 22px;
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.composerInput {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #f4f4f5;
+  font-size: 16px;
+  padding: 10px 4px;
+}
+
+.sendBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sendBtn:disabled {
+  opacity: 0.45;
+}
+
+.sendError {
+  margin: 0 16px 6px;
+  color: #ffb4ab;
+  font-size: 12px;
+}
+
+.emptyThread {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  color: #8b90a0;
+  padding: 24px;
+}
+
+.emptyThread .material-symbols-outlined {
+  font-size: 44px;
+  color: #4b8eff;
+}
+
+.emptyThread h2 {
+  margin: 0;
+  color: #f4f4f5;
+}

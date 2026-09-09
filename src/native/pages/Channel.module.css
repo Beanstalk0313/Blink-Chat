@@ -1,0 +1,891 @@
+.page {
+  --f7-page-bg-color: #131315;
+  --f7-navbar-bg-color: rgba(24, 24, 26, 0.92);
+  --f7-navbar-link-color: #c1c6d7;
+}
+
+.centerLoader {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #8b90a0;
+  min-height: 60vh;
+}
+
+.loader {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #4b8eff;
+  border-radius: 50%;
+  animation: loader-spin 1s linear infinite;
+}
+
+@keyframes loader-spin { to { transform: rotate(360deg); } }
+
+.navChannelName {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.navLink {
+  display: inline-flex;
+  padding: 0 10px;
+  color: #c1c6d7;
+}
+
+/* Panel */
+.panelHeader {
+  padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.panelHeader strong {
+  font-size: 16px;
+  color: #f4f4f5;
+}
+
+.panelHeader small {
+  color: #8b90a0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panelActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.panelActions button {
+  width: 34px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+  color: #c1c6d7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.panelActions .material-symbols-outlined {
+  font-size: 17px;
+}
+
+.channelList {
+  display: flex;
+  flex-direction: column;
+  padding: 8px;
+  gap: 2px;
+}
+
+.channelRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 10px;
+  border-radius: 10px;
+  color: #c1c6d7;
+  text-decoration: none;
+  font-size: 15px;
+}
+
+.channelRow .material-symbols-outlined {
+  font-size: 19px;
+  color: #8b90a0;
+}
+
+.channelName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channelRow small {
+  color: #8b90a0;
+}
+
+.activeChannel {
+  background: rgba(75, 142, 255, 0.16);
+  color: #adc6ff;
+}
+
+.activeChannel .material-symbols-outlined {
+  color: #adc6ff;
+}
+
+.addChannelRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  margin-bottom: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: transparent;
+  color: #adc6ff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.panelUser {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 10px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #e4e2e4;
+  text-decoration: none;
+}
+
+.panelUser span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.panelUser strong {
+  font-size: 14px;
+}
+
+.panelUser small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+/* Messages: Framework7's own message styling (bubbles, names, times). Only
+   app-specific additions (mentions, files, actions) are styled here. */
+.messages {
+  --f7-messages-content-bg-color: #131315;
+}
+
+/* Mentions keep Blink highlighting inside F7's default message bubbles. */
+.mention {
+  color: #adc6ff;
+  background: rgba(75, 142, 255, 0.14);
+  border-radius: 6px;
+  padding: 0 3px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.fileCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e4e2e4;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.fileCardName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageActions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.messageActions button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.messageActions .material-symbols-outlined {
+  font-size: 16px;
+}
+
+.loadMore {
+  display: block;
+  margin: 8px auto;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c1c6d7;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Composer: pinned to the bottom of the page (the page is the containing
+   block, position absolute). The message scroll area above gets matching
+   bottom padding so the last message is never hidden behind it. */
+.composerWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  padding: 6px 0 calc(8px + env(safe-area-inset-bottom));
+  background: rgba(19, 19, 21, 0.96);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Specificity beats native.css's .blink-native .page-content padding rule. */
+.page :global(.page-content).messageScroll {
+  padding-bottom: calc(140px + env(safe-area-inset-bottom));
+}
+
+.editForm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.editForm input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f5;
+  font-size: 14px;
+}
+
+.editForm button {
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.composer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 12px;
+  padding: 4px 6px 4px 10px;
+  border-radius: 22px;
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.plusBtn { width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: #8b90a0; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; cursor: pointer; }
+.plusBtn:disabled { opacity: .45; }
+.composerMenu { position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 50; min-width: 180px; padding: 6px; border-radius: 12px; background: #29292d; border: 1px solid rgba(255,255,255,.12); box-shadow: 0 12px 28px rgba(0,0,0,.4); }
+.composerMenuItem { display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px; border: 0; border-radius: 8px; background: transparent; color: #f4f4f5; text-align: left; font-size: 14px; cursor: pointer; }
+.composerMenuItem:hover { background: rgba(255,255,255,.08); }
+
+.attachBtn {
+  display: inline-flex;
+  color: #8b90a0;
+  cursor: pointer;
+}
+
+.composerInput {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #f4f4f5;
+  font-size: 16px;
+  padding: 10px 4px;
+}
+.composerInput::placeholder { color: #8b90a0; opacity: 1; }
+
+.sendBtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sendBtn:disabled {
+  opacity: 0.45;
+}
+
+.mentionMenu {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+.mentionMenu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: #e4e2e4;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mentionMenu button:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sendError {
+  margin: 0 16px 6px;
+  color: #ffb4ab;
+  font-size: 12px;
+}
+
+.pendingAttachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(75, 142, 255, 0.12);
+  color: #adc6ff;
+  font-size: 13px;
+}
+
+.pendingAttachment button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  cursor: pointer;
+}
+
+.pendingName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- System messages ---- */
+.systemMessage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 12px;
+  color: #8b90a0;
+  font-size: 12px;
+  text-align: center;
+}
+
+.systemMessage .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.systemMessage small {
+  opacity: 0.7;
+  font-size: 11px;
+}
+
+/* ---- Replies ---- */
+.replyQuote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  border: 0;
+  border-left: 3px solid #4b8eff;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #8b90a0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.replyQuote .material-symbols-outlined {
+  font-size: 14px;
+  color: #4b8eff;
+  flex-shrink: 0;
+}
+
+.replyQuoteBody {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.replyQuoteBody strong {
+  color: #adc6ff;
+  font-size: 11px;
+}
+
+.replyQuoteBody span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.replyBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(75, 142, 255, 0.12);
+  color: #e4e2e4;
+  font-size: 13px;
+}
+
+.replyBar > .material-symbols-outlined {
+  color: #4b8eff;
+}
+
+.replyBar button {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  cursor: pointer;
+}
+
+.replyBarBody {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.replyBarBody strong {
+  color: #adc6ff;
+  font-size: 11px;
+}
+
+.replyBarBody span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: #8b90a0;
+}
+
+/* ---- Polls ---- */
+.pollCard {
+  width: min(100%, 260px);
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pollQuestion {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.pollOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pollOption {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: hidden;
+  padding: 9px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e4e2e4;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pollOptionVoted {
+  border-color: #4b8eff;
+}
+
+.pollOptionText {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pollOptionCount {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  color: #8b90a0;
+  font-size: 11px;
+}
+
+.pollBar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: rgba(75, 142, 255, 0.22);
+  transition: width 0.3s ease;
+}
+
+.pollMeta {
+  display: block;
+  margin-top: 6px;
+  color: #8b90a0;
+  font-size: 11px;
+}
+
+/* ---- Reactions ---- */
+.reactionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.reactionChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  color: #e4e2e4;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reactionChipActive {
+  background: rgba(75, 142, 255, 0.22);
+  border-color: #4b8eff;
+}
+
+.reactionChip .material-symbols-outlined {
+  font-size: 13px;
+}
+
+/* ---- Typing indicator ---- */
+.typingIndicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 6px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.typingDots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.typingDots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #8b90a0;
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typingDots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typingDots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* ---- Poll composer button ---- */
+.pollBtn {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.pollBtn:disabled {
+  opacity: 0.45;
+}
+
+/* ---- Message search ---- */
+.searchOverlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1f1f21;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+
+.searchBarRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #f4f4f5;
+  font-size: 15px;
+}
+
+.searchClose {
+  border: 0;
+  background: transparent;
+  color: #8b90a0;
+  cursor: pointer;
+}
+
+.searchResults {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.searchResult {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: #e4e2e4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.searchResult:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.searchResultBody {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.searchResultMeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.searchResultMeta strong {
+  font-size: 13px;
+}
+
+.searchResultMeta small {
+  color: #8b90a0;
+  font-size: 11px;
+}
+
+.searchResultSnippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.searchHint {
+  margin: 0;
+  padding: 10px 12px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+/* ---- Markdown ---- */
+.mdLink {
+  color: #adc6ff;
+  text-decoration: underline;
+}
+
+.mdInlineCode {
+  padding: 1px 5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+}
+
+.mdCodeBlock {
+  position: relative;
+  max-width: 100%;
+  margin: 6px 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.mdCodeBlock code {
+  font: inherit;
+}
+
+.mdCodeBlockLang {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  color: #8b90a0;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.mdQuote {
+  margin: 4px 0;
+  padding-left: 10px;
+  border-left: 3px solid #8b90a0;
+  color: #8b90a0;
+}
+
+.mdHeading {
+  margin: 5px 0 3px;
+  font-weight: 700;
+}
+
+.mdHeading[data-level='1'] { font-size: 16px; }
+.mdHeading[data-level='2'] { font-size: 15px; }
+.mdHeading[data-level='3'] { font-size: 14px; }
+
+.mdList {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.mdList li {
+  margin: 2px 0;
+}
+
+.mdParagraph {
+  min-width: 0;
+}
+
+/* Voice */
+.voiceWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  color: #8b90a0;
+}
+
+.voiceWrap h2 {
+  margin: 0;
+  color: #f4f4f5;
+}
+
+.voiceRoster {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.voicePerson {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #c1c6d7;
+}
+
+.voiceEmptyRoster {
+  font-size: 13px;
+}
+
+.joinVoiceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 12px 22px;
+  border-radius: 999px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}

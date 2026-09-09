@@ -150,8 +150,7 @@ const Sidebar = () => {
   const navItems = [
     { icon: 'home', label: 'Home', to: '/' },
     { icon: 'grid_view', label: 'Communities', to: '/communities' },
-    { icon: 'explore', label: 'Discover', to: '/discover' },
-    { icon: 'admin_panel_settings', label: 'Admin', to: '/admin' }
+    { icon: 'explore', label: 'Discover', to: '/discover' }
   ];
   const isExpanded = isHovered || isPinned;
   const openContextMenu = (event, community) => {

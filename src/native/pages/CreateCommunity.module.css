@@ -1,0 +1,129 @@
+.page {
+  --f7-page-bg-color: #131315;
+}
+
+.content {
+  padding-bottom: 40px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 0 16px;
+}
+
+.uploadSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.iconPreview {
+  width: 92px;
+  height: 92px;
+  border-radius: 22px;
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b90a0;
+  cursor: pointer;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.iconPreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.iconPreview .material-symbols-outlined {
+  font-size: 34px;
+}
+
+.hint {
+  margin: 0;
+  color: #8b90a0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.zoomRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b90a0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: #8b90a0;
+  font-weight: 600;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: #4b8eff;
+}
+
+.toggleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.toggleRow strong {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: #f4f4f5;
+}
+
+.toggleRow small {
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.submitBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.submitBtn:disabled {
+  opacity: 0.6;
+}

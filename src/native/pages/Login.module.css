@@ -1,0 +1,144 @@
+.container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #131315;
+}
+
+.card {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #1b1b1d;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 22px;
+  padding: 28px 22px;
+  box-sizing: border-box;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  align-self: center;
+  object-fit: contain;
+}
+
+.title {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  color: #f4f4f5;
+}
+
+.subtitle {
+  margin: -6px 0 6px;
+  text-align: center;
+  color: #8b90a0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.error {
+  background: rgba(255, 180, 171, 0.1);
+  color: #ffb4ab;
+  border: 1px solid rgba(255, 180, 171, 0.25);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.input {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 14, 16, 0.6);
+  color: #f4f4f5;
+  font-size: 16px;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.input:focus {
+  border-color: #4b8eff;
+}
+
+.primaryBtn {
+  padding: 13px;
+  border-radius: 14px;
+  border: 0;
+  background: #4b8eff;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.7;
+}
+
+.forgotBtn {
+  background: transparent;
+  border: 0;
+  color: #adc6ff;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: center;
+  padding: 2px;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8b90a0;
+  font-size: 12px;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.googleBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.googleBtn img {
+  width: 18px;
+  height: 18px;
+}
+
+.toggleBtn {
+  background: transparent;
+  border: 0;
+  color: #adc6ff;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+}

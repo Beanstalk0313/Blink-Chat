@@ -1,9 +1,12 @@
 # Dependencies
 node_modules/
 dist/
+dist-native/
 
 # Environment variables
 .env
+.env-agent
+.env-backup
 
 # Logs
 logs/
