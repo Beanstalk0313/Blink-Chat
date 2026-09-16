@@ -965,14 +965,13 @@ export default function Channel({ f7route }) {
             </Messages>
           </PageContent>
 
-          {selectedProfile && createPortal(
+          {selectedProfile && (
             <ProfilePopover
               user={selectedProfile.user}
               isOwnProfile={selectedProfile.user?.uid === currentUid}
               anchorEl={selectedProfile.anchorEl}
               onClose={() => setSelectedProfile(null)}
-            />,
-            document.body
+            />
           )}
 
           <div className={styles.composerWrap}>

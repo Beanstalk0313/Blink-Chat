@@ -1,7 +1,10 @@
 /* Blink Chat — Framework7 "Native Initiative" styles.
-   Loads Framework7 CSS, then maps Blink's dark palette onto the iOS and
-   Material themes. All overrides are scoped under the body.blink-native class
-   applied by NativeApp. */
+   Loads Framework7 CSS plus the structural/functional CSS custom Blink Native
+   widgets need (call overlay positioning, menu button, avatars, badges,
+   changelog cards, bug-fix overrides). Blink's custom color palette/theme
+   overrides have been intentionally removed so the app uses stock Framework7
+   theming. All rules are scoped under the body.blink-native class applied by
+   NativeApp. */
 /* The lite-bundle JS includes every component module (Panel, Dialog, ...),
    so the CSS must be the bundle too. 'framework7/css' resolves to the
    core-only stylesheet, which leaves Panel/View/Page completely unstyled
@@ -25,69 +28,6 @@ body,
   height: 100%;
 }
 
-body.blink-native {
-  --f7-theme-color: #4b8eff;
-  --f7-theme-color-rgb: 75, 142, 255;
-  --f7-page-bg-color: #131315;
-  --f7-text-color: #e4e2e4;
-  --f7-font-family: Manrope, -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif;
-  background: #131315;
-}
-
-/* iOS theme (dark). F7 puts .ios/.dark on <html> (the ancestor of body), so
-   match both directions to cover every F7 version/layout. */
-html.ios body.blink-native,
-html.ios.dark body.blink-native,
-.blink-native.ios,
-.blink-native.ios.dark {
-  --f7-page-bg-color: #131315;
-  --f7-page-bg-color-rgb: 19, 19, 21;
-  --f7-text-color: #e4e2e4;
-  --f7-bars-bg-color: rgba(24, 24, 26, 0.92);
-  --f7-bars-bg-color-rgb: 24, 24, 26;
-  --f7-bars-text-color: #f4f4f5;
-  --f7-tabbar-link-active-color: #4b8eff;
-  --f7-list-bg-color: #1b1b1d;
-  --f7-list-border-color: rgba(255, 255, 255, 0.08);
-  --f7-list-item-border-color: rgba(255, 255, 255, 0.08);
-  --f7-list-item-title-text-color: #f4f4f5;
-  --f7-list-item-subtitle-text-color: #c1c6d7;
-  --f7-list-item-footer-text-color: #8b90a0;
-  --f7-list-item-after-text-color: #c1c6d7;
-  --f7-input-bg-color: transparent;
-  --f7-input-text-color: #f4f4f5;
-  --f7-block-title-text-color: #8b90a0;
-  --f7-block-strong-bg-color: #1b1b1d;
-  --f7-dialog-bg-color: #1f1f21;
-  --f7-dialog-text-color: #e4e2e4;
-  --f7-sheet-bg-color: #1f1f21;
-  --f7-navbar-subtitle-text-color: #8b90a0;
-  --f7-searchbar-bg-color: rgba(24, 24, 26, 0.92);
-}
-
-/* Material theme (dark) — overrides after Framework7's dynamic MD palette so
-   Blink surfaces keep their own near-black tones. */
-html.md body.blink-native,
-html.md.dark body.blink-native,
-.blink-native.md,
-.blink-native.md.dark {
-  --f7-md-primary: #4b8eff;
-  --f7-md-on-primary: #ffffff;
-  --f7-md-surface: #131315;
-  --f7-md-surface-1: #1b1b1d;
-  --f7-md-surface-2: #1f1f21;
-  --f7-md-surface-3: #2a2a2c;
-  --f7-md-surface-4: #2a2a2c;
-  --f7-md-surface-5: #353437;
-  --f7-md-on-surface: #e4e2e4;
-  --f7-md-on-surface-variant: #c1c6d7;
-  --f7-md-outline: #8b90a0;
-  --f7-md-secondary-container: #7d01b1;
-  --f7-md-on-secondary-container: #e5a9ff;
-  --f7-page-bg-color: #131315;
-  --f7-text-color: #e4e2e4;
-}
-
 /* ---------- Shared native helpers ---------- */
 /* Navbar menu button. A plain <button> (not Framework7's Link): the F7 click
    machinery on anchors is unreliable here, and a button sidesteps it entirely.
@@ -102,15 +42,6 @@ html.md.dark body.blink-native,
   position: relative;
   overflow: hidden;
   -webkit-tap-highlight-color: transparent;
-}
-
-/* iOS has no Material ripple; give the round navbar menu button a subtle
-   press tint there (on Android the Framework7 ripple above is the feedback). */
-html.ios.blink-native .n-menu-btn:active,
-html.ios.dark.blink-native .n-menu-btn:active,
-.blink-native.ios .n-menu-btn:active,
-.blink-native.ios.dark .n-menu-btn:active {
-  background: rgba(255, 255, 255, 0.12);
 }
 
 .blink-native .n-menu-btn {
@@ -255,9 +186,53 @@ html.ios.dark.blink-native .n-menu-btn:active,
   height: 3.75rem;
 }
 
-/* New-message appear animation (F7's own) honors reduced-motion. */
+/* New-message appear animation. Using a simpler transform to avoid layout thrashing. */
+.blink-native .message-appear-from-bottom {
+  animation: messageAppear 0.3s cubic-bezier(0.2, 0.4, 0.4, 1);
+}
+
+@keyframes messageAppear {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blink-native .message-appear-from-bottom {
     animation: none;
   }
+}
+
+/* Sidebar header styling fix for consistency. */
+.blink-native .navbar-inner {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.blink-native .nav-title {
+  font-weight: 600;
+  font-size: 18px;
+}
+
+/* Strip F7's default pill/bubble chrome from links inside the navbar .right/left
+   slots (this is a bug fix: F7's default rounded/backgrounded link chrome
+   renders as an unwanted oval around avatar/menu links). */
+body.blink-native .navbar .right > a.link,
+body.blink-native .navbar .right > a,
+body.blink-native .navbar .left > a.link,
+body.blink-native .navbar .left > a {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  padding: 0 4px !important;
+  min-width: 0;
+  outline: none !important;
+}
+
+/* Also strip F7's ::after pseudo-element (active-state highlight overlay). */
+body.blink-native .navbar .right > a.link::after,
+body.blink-native .navbar .right > a::after,
+body.blink-native .navbar .left > a.link::after,
+body.blink-native .navbar .left > a::after {
+  display: none !important;
 }
