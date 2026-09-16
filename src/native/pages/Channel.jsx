@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { f7, Navbar, NavLeft, NavRight, NavTitle, Page, PageContent, Messages, Message, Link } from 'framework7-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, f7, Link, Navbar, NavLeft, NavRight, NavTitle, Page, PageContent, Messages, Message, Sheet } from 'framework7-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import {
@@ -23,6 +24,7 @@ import {
   joinVoiceChannel,
   togglePinMessage,
   toggleReaction,
+  compareMessages,
   votePoll,
   updateLastRead,
   setCommunityMuted,
@@ -40,6 +42,7 @@ import { getMemberPermissions } from '../../services/permissions';
 import { playSentSound, timeShort } from '../utils';
 import { navigateTo } from '../navigation';
 import MenuButton from '../components/MenuButton';
+import ProfilePopover from '../components/ProfilePopover';
 import styles from './Channel.module.css';
 
 const EMOJI_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
@@ -77,6 +80,15 @@ export default function Channel({ f7route }) {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearchFetching, setIsSearchFetching] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
+  const [memberSheetOpen, setMemberSheetOpen] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState(null);
+  // Defer the (potentially heavy) message list render by a couple of frames
+  // after a channel switch so Framework7's page-switch transition gets a
+  // chance to start compositing before React commits a big DOM tree of
+  // Message nodes. Without this, a channel with any messages can make the
+  // transition stutter or skip on both iOS and Android.
+  const [messagesReadyChannel, setMessagesReadyChannel] = useState(null);
+  const [messagesReady, setMessagesReady] = useState(false);
 
   const messagesEndRef = useRef(null);
   const initialLoad = useRef(true);
@@ -92,6 +104,23 @@ export default function Channel({ f7route }) {
   const currentUid = currentUser?.uid;
   const currentChannel = channels.find(channel => channel.id === routeChannelId) || channels[0];
   const currentChannelId = currentChannel?.id;
+
+  // Reset the deferred-render flag during render (not in an effect) the
+  // moment the channel id changes, so it's already false for the very first
+  // paint of the new channel.
+  if (messagesReadyChannel !== currentChannelId) {
+    setMessagesReadyChannel(currentChannelId);
+    setMessagesReady(false);
+  }
+
+  // Remember the last channel the user actually viewed in this community so
+  // Community Settings' back button can leave settings and return there.
+  useEffect(() => {
+    if (!communityId || !currentChannelId) return;
+    try {
+      window.localStorage.setItem(`blink-native-last-channel-${communityId}`, currentChannelId);
+    } catch { /* storage unavailable — non-fatal */ }
+  }, [communityId, currentChannelId]);
   const activeMembers = members.filter(member => !community?.kickedUsers?.[member.uid]);
 
   // Kick cleanup, same behavior as the web app.
@@ -102,6 +131,47 @@ export default function Channel({ f7route }) {
     leaveCommunity(currentUid, communityId).catch(() => {})
       .finally(() => navigateTo('/communities/', { reloadCurrent: true }));
   }, [kickedAt, currentUid, communityId]);
+
+  // Mark the active channel read on user interaction, ported from the web
+  // ChatArea: any pointer/touch/key/click while the channel is on screen
+  // clears its unread state immediately (750ms throttle).
+  const markCurrentChannelRead = useCallback(() => {
+    if (!currentChannelId || !currentUid || document.visibilityState !== 'visible') return;
+    const nowMs = Date.now();
+    if (nowMs - liveReadThrottleRef.current < 750) return;
+    liveReadThrottleRef.current = nowMs;
+    updateLastRead(currentUid, currentChannelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+  }, [currentChannelId, currentUid]);
+
+  useEffect(() => {
+    if (!currentChannelId || !currentUid) return undefined;
+    const handleInteraction = event => {
+      if (event.type === 'keydown' && event.isComposing) return;
+      markCurrentChannelRead();
+    };
+    const interactionEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
+    interactionEvents.forEach(eventName => document.addEventListener(eventName, handleInteraction, true));
+    return () => interactionEvents.forEach(eventName => document.removeEventListener(eventName, handleInteraction, true));
+  }, [currentChannelId, currentUid, markCurrentChannelRead]);
+
+  // Returning to the app after a background period marks the active channel
+  // read (10s throttle, matching the web app).
+  useEffect(() => {
+    if (!currentChannelId || !currentUid) return undefined;
+    const markReadOnRefocus = () => {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+      const nowMs = Date.now();
+      if (nowMs - liveReadThrottleRef.current < 10000) return;
+      liveReadThrottleRef.current = nowMs;
+      updateLastRead(currentUid, currentChannelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+    };
+    window.addEventListener('focus', markReadOnRefocus);
+    document.addEventListener('visibilitychange', markReadOnRefocus);
+    return () => {
+      window.removeEventListener('focus', markReadOnRefocus);
+      document.removeEventListener('visibilitychange', markReadOnRefocus);
+    };
+  }, [currentChannelId, currentUid]);
 
   const permissions = getMemberPermissions(community, currentUid);
   const canManageChannels = permissions.includes('manage_channels');
@@ -202,6 +272,14 @@ export default function Channel({ f7route }) {
   }, [currentChannelId]);
 
   useEffect(() => {
+    let raf2;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setMessagesReady(true));
+    });
+    return () => { cancelAnimationFrame(raf1); if (raf2) cancelAnimationFrame(raf2); };
+  }, [currentChannelId]);
+
+  useEffect(() => {
     if (!currentChannelId || !currentUid) return undefined;
     const notificationPreferences = currentUser?.profile?.notificationPreferences || {};
     const notificationMode = notificationPreferences.channelModes?.[currentChannelId] || 'mentions';
@@ -236,7 +314,8 @@ export default function Channel({ f7route }) {
       const newIncomingMessage = newlyArrived.find(message => message.authorUid !== currentUid);
       if (newIncomingMessage && !newIncomingMessage.system && !isMuted && !communityMuted) {
         const isFresh = !newIncomingMessage.timestamp || newIncomingMessage.timestamp >= (Date.now() - 5000);
-        if (isFresh && (notificationMode === 'all' || (notificationMode === 'mentions' && mentionsUser(newIncomingMessage.text, currentUserDisplayName)))) {
+        const isReplyToMe = newIncomingMessage.replyTo?.authorUid === currentUid;
+        if (isFresh && (notificationMode === 'all' || (notificationMode === 'mentions' && (mentionsUser(newIncomingMessage.text, currentUserDisplayName) || isReplyToMe)))) {
           if (document.visibilityState === 'visible' && document.hasFocus()) {
             notify(`#${currentChannel?.name || 'chat'}`, newIncomingMessage.text || 'New attachment');
           }
@@ -256,10 +335,18 @@ export default function Channel({ f7route }) {
     }, messageLimit);
   }, [currentChannelId, currentUid, currentUserDisplayName, currentUser?.profile?.notificationPreferences, currentChannel?.name, communityId, isMuted, messageLimit, notify]);
 
+  const lastMessageIdRef = useRef(null);
   useLayoutEffect(() => {
-    if (!messages.length) return;
+    if (!messagesReady || !messages.length) return;
+    // Only auto-scroll when a genuinely NEW message arrives (or the deferred
+    // list just became visible after a channel switch). Game moves and edits
+    // change existing messages without changing the last id, and scrolling
+    // there would yank the viewport on every opponent turn.
+    const lastId = messages[messages.length - 1].id;
+    if (lastId === lastMessageIdRef.current) return;
+    lastMessageIdRef.current = lastId;
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' });
-  }, [messages]);
+  }, [messages, messagesReady]);
 
   // Mention suggestions (ported semantics from the web composer).
   const mentionOptions = mentionQuery === null ? [] : (() => {
@@ -427,7 +514,7 @@ export default function Channel({ f7route }) {
           setMessages(previous => {
             const byId = new Map(previous.map(message => [message.id, message]));
             byId.set(single.id, single);
-            return [...byId.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+            return [...byId.values()].sort(compareMessages);
           });
         }
       } catch {
@@ -510,7 +597,7 @@ export default function Channel({ f7route }) {
 
   const chooseGameOpponent = (type, opponents) => f7.actions.create({ buttons: [
     { label: true, text: 'CHOOSE OPPONENT' },
-    ...opponents.slice(0, 12).map(opponent => ({ text: opponent.displayName || 'Member', onClick: () => performSend('', null, { game: { type, opponentUid: opponent.uid, opponentName: opponent.displayName || 'Member' } }) })),
+    ...opponents.slice(0, 12).map(opponent => ({ text: opponent.displayName || 'Member', onClick: () => performSend('', null, { game: { type, opponentUid: opponent.uid, opponentName: opponent.displayName || 'Member', authorName: currentUserDisplayName || 'Someone' } }) })),
     { text: 'Cancel', color: 'red' }
   ] }).open();
 
@@ -610,14 +697,18 @@ export default function Channel({ f7route }) {
     f7.actions.create({ buttons }).open();
   };
 
-  const openMemberSheet = () => {
-    const buttons = activeMembers.slice(0, 8).map(member => ({
-      text: `${member.displayName}${member.uid === community?.adminUid ? ' (Owner)' : ''}${presence[member.uid] ? ' • online' : ''}`
-    }));
-    if (activeMembers.length > 8) buttons.push({ text: `…and ${activeMembers.length - 8} more`, label: true });
-    if (!activeMembers.length) buttons.push({ text: 'No members found.', label: true });
-    buttons.push({ text: 'Close', color: 'blue', close: true });
-    f7.actions.create({ buttons }).open();
+  // Members is a full modal (not an actions sheet): each member is tappable
+  // to view their profile or jump into a private conversation.
+  const openMemberSheet = () => setMemberSheetOpen(true);
+
+  const dmMember = member => {
+    setMemberSheetOpen(false);
+    navigateTo(`/messages/?uid=${encodeURIComponent(member.uid)}`);
+  };
+
+  const viewMemberProfile = member => {
+    setMemberSheetOpen(false);
+    navigateTo(`/profile/${encodeURIComponent(member.uid)}/`);
   };
 
   if (!community) {
@@ -661,6 +752,40 @@ export default function Channel({ f7route }) {
         </NavRight>
       </Navbar>
 
+      {/* Members modal. Rendered at the Page root, NOT inside the Navbar: F7's
+          navbar creates its own stacking context (z-index 500 + backface
+          visibility), which trapped a fixed-position backdrop inside the
+          navbar box and clipped the sheet to a sliver at the top. */}
+      {/* Members sheet. Rendered at the Page root, NOT inside the Navbar: F7's
+          navbar creates its own stacking context (z-index 500 + backface
+          visibility), which trapped a fixed-position backdrop inside the
+          navbar box and clipped the sheet to a sliver at the top. */}
+      <Sheet opened={memberSheetOpen} onSheetClosed={() => setMemberSheetOpen(false)} swipeToClose backdrop className={styles.memberSheet}>
+        <div className="sheet-modal-inner">
+          <div className={styles.memberSheetHead}>
+            <strong>Members · {activeMembers.length}</strong>
+            <Link iconOnly onClick={() => setMemberSheetOpen(false)} aria-label="Close"><span className="material-symbols-outlined">close</span></Link>
+          </div>
+          <div className={styles.memberSheetList}>
+            {activeMembers.length ? activeMembers.map(member => (
+              <div className={styles.memberRow} key={member.uid}>
+                <button type="button" className={styles.memberRowMain} onClick={() => viewMemberProfile(member)}>
+                  <UserAvatar user={member} size="2.25rem" />
+                  <span className={styles.memberRowName}>
+                    <span>{member.displayName}{member.uid === community?.adminUid ? ' (Owner)' : ''}</span>
+                    <small>{presence[member.uid] ? 'Online' : 'Offline'}</small>
+                  </span>
+                  <span className={`${styles.statusDot} ${presence[member.uid] ? styles.statusDotOnline : ''}`} />
+                </button>
+                <button type="button" className={styles.memberRowAction} onClick={() => dmMember(member)} aria-label={`Message ${member.displayName}`} title="Private message">
+                  <span className="material-symbols-outlined">chat_bubble</span>
+                </button>
+              </div>
+            )) : <p className={styles.memberSheetEmpty}>No members found.</p>}
+          </div>
+        </div>
+      </Sheet>
+
       {currentChannel?.type === 'voice' ? (
         <PageContent>
           <div className={styles.voiceWrap}>
@@ -677,9 +802,9 @@ export default function Channel({ f7route }) {
                 ))
                 : <span className={styles.voiceEmptyRoster}>No one is in the room yet.</span>}
             </div>
-            <button type="button" className={styles.joinVoiceBtn} onClick={handleJoinVoice}>
+            <Button type="button" round fill className={styles.joinVoiceBtn} onClick={handleJoinVoice}>
               <span className="material-symbols-outlined">headset_mic</span> Join voice channel
-            </button>
+            </Button>
           </div>
         </PageContent>
       ) : (
@@ -693,14 +818,22 @@ export default function Channel({ f7route }) {
                 re-animates the whole history mid page-transition. With init
                 off, only messages we explicitly mark (newly arrived ones, via
                 animatedMessageIds) get the appear animation. */}
-            <Messages className={styles.messages} init={false}>
-              {messages.length >= messageLimit && (
-                <button type="button" className={styles.loadMore} onClick={() => setMessageLimit(previous => previous + 25)}>Load older messages</button>
+            <Messages className={styles.messages} init={false} autoLayout={false}>
+              {messagesReady && messages.length >= messageLimit && (
+                <Button type="button" round outline className={styles.loadMore} onClick={() => setMessageLimit(previous => previous + 25)}>Load older messages</Button>
               )}
-              {messages.map(message => {
+              {messagesReady && messages.map((message, index) => {
                 const author = authorFor(message);
                 const isMe = author.uid === currentUid;
-                const tail = message.id === messages[messages.length - 1]?.id;
+                // iMessage-style grouping: consecutive messages from the same
+                // sender (within 5 minutes) form a run; only the run's first
+                // message shows the name/timestamp and only its last message
+                // gets the tail corner + mask.
+                const inSameRun = other => other && !other.system && !message.system
+                  && other.authorUid === message.authorUid
+                  && Math.abs((other.timestamp || 0) - (message.timestamp || 0)) < 5 * 60 * 1000;
+                const isFirst = !inSameRun(messages[index - 1]);
+                const isLast = !inSameRun(messages[index + 1]);
                 if (message.system) {
                   return (
                     <div key={message.id} className={styles.systemMessage}>
@@ -718,22 +851,59 @@ export default function Channel({ f7route }) {
                 const pollTotal = poll ? [...new Set(poll.options.flatMap(option => Object.keys(poll.votes?.[option.id] || {})))].length : 0;
                 return (
                   <Message
-                    key={message.id}
-                    id={`blink-msg-${message.id}`}
-                    type={isMe ? 'sent' : 'received'}
-                    className={animatedMessageIds.has(message.id) ? 'message-appear-from-bottom' : undefined}
-                    first={message === messages[0]}
-                    last={tail}
-                    tail={tail}
+                  key={message.id}
+                  id={`blink-msg-${message.id}`}
+                  type={isMe ? 'sent' : 'received'}
+                  className={animatedMessageIds.has(message.id) ? 'message-appear-from-bottom' : undefined}
+                  first={isFirst}
+                  last={isLast}
+                  tail={isLast}
+                  sameName={!isFirst}
+                  sameHeader={!isFirst}
+                  onClick={() => {
+                    const buttons = [];
+                    buttons.push({
+                      text: 'Reply',
+                      onClick: () => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })
+                    });
+                    buttons.push({
+                      text: 'React',
+                      onClick: () => openReactionSheet(message)
+                    });
+                    if (isMe) {
+                      buttons.push({
+                        text: 'Edit',
+                        onClick: () => { setEditingMessageId(message.id); setEditingText(message.text || ''); }
+                      });
+                    }
+                    if (isMe || canManageMessages) {
+                      buttons.push({
+                        text: 'Delete',
+                        color: 'red',
+                        onClick: async () => {
+                          try { await deleteMessage(currentChannelId, message.id); }
+                          catch (err) { f7.dialog.alert('Failed to delete message: ' + (err?.message || 'Permission denied')); }
+                        }
+                      });
+                    }
+                    if (canManageMessages) {
+                      buttons.push({
+                        text: message.isPinned ? 'Unpin' : 'Pin',
+                        onClick: () => togglePinMessage(currentChannelId, message.id, message.isPinned).catch(error => f7.dialog.alert(error?.message || 'Pin failed'))
+                      });
+                    }
+                    buttons.push({ text: 'Cancel', color: 'gray' });
+                    f7.actions.create({ buttons }).open();
+                  }}
                   >
-                    <div slot="avatar"><UserAvatar user={author} size="2.25rem" /></div>
+                  <div slot="avatar" data-profile-trigger><button type="button" className={styles.avatarBtn} onClick={event => { event.stopPropagation(); const anchorEl = event.currentTarget; setSelectedProfile(previous => (previous?.messageId === message.id ? null : { messageId: message.id, user: author, anchorEl })); }}><UserAvatar user={author} size="2.25rem" /></button></div>
                     {!isMe && <div slot="name" style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</div>}
                     <div slot="header">{timeShort(message.timestamp)}</div>
                     <div slot="text">
                       {editingMessageId === message.id ? (
                         <form className={styles.editForm} onSubmit={async event => { event.preventDefault(); await handleEditMessage(message.id, editingText); }}>
                           <input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus />
-                          <button type="submit">Save</button>
+                          <Button type="submit" small>Save</Button>
                         </form>
                       ) : (
                         <>
@@ -775,26 +945,19 @@ export default function Channel({ f7route }) {
                               <span className="material-symbols-outlined">download</span>
                             </a>
                           )}
-                          <div className={styles.messageActions}>
-                            <button type="button" onClick={() => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })}><span className="material-symbols-outlined">reply</span></button>
-                            <button type="button" onClick={() => openReactionSheet(message)}><span className="material-symbols-outlined">add_reaction</span></button>
-                            {isMe && <button type="button" onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }}><span className="material-symbols-outlined">edit</span></button>}
-                            {(isMe || canManageMessages) && <button type="button" onClick={async () => { try { await deleteMessage(currentChannelId, message.id); } catch (err) { f7.dialog.alert('Failed to delete message: ' + (err?.message || 'Permission denied')); } }}><span className="material-symbols-outlined">delete</span></button>}
-                            {canManageMessages && <button type="button" onClick={() => togglePinMessage(currentChannelId, message.id, message.isPinned).catch(error => f7.dialog.alert(error?.message || 'Pin failed'))}><span className="material-symbols-outlined">push_pin</span></button>}
-                          </div>
-                          {reactions.length > 0 && (
-                            <div className={styles.reactionRow}>
-                              {reactions.map(({ emoji, uids }) => (
-                                <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(currentUid) ? styles.reactionChipActive : ''}`} onClick={() => toggleReaction(currentChannelId, message.id, emoji, currentUid, uids.includes(currentUid)).catch(() => {})}>
-                                  <span>{emoji}</span><span>{uids.length}</span>
-                                </button>
-                              ))}
-                              <button type="button" className={styles.reactionChip} onClick={() => openReactionSheet(message)}><span className="material-symbols-outlined">add</span></button>
-                            </div>
-                          )}
                         </>
                       )}
                     </div>
+                    {reactions.length > 0 && (
+                      <div slot="footer" className={styles.reactionRow} onClick={event => event.stopPropagation()}>
+                        {reactions.map(({ emoji, uids }) => (
+                          <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(currentUid) ? styles.reactionChipActive : ''}`} onClick={() => toggleReaction(currentChannelId, message.id, emoji, currentUid, uids.includes(currentUid)).catch(() => {})}>
+                            <span>{emoji}</span><span>{uids.length}</span>
+                          </button>
+                        ))}
+                        <button type="button" className={styles.reactionChip} onClick={() => openReactionSheet(message)}><span className="material-symbols-outlined">add</span></button>
+                      </div>
+                    )}
                   </Message>
                 );
               })}
@@ -802,12 +965,22 @@ export default function Channel({ f7route }) {
             </Messages>
           </PageContent>
 
+          {selectedProfile && createPortal(
+            <ProfilePopover
+              user={selectedProfile.user}
+              isOwnProfile={selectedProfile.user?.uid === currentUid}
+              anchorEl={selectedProfile.anchorEl}
+              onClose={() => setSelectedProfile(null)}
+            />,
+            document.body
+          )}
+
           <div className={styles.composerWrap}>
             {isSearchOpen && (
               <div className={styles.searchOverlay}>
                 <div className={styles.searchBarRow}>
                   <input className={styles.searchInput} value={searchQuery} onChange={event => handleSearchChange(event.target.value)} placeholder="Search messages" autoFocus />
-                  <button type="button" className={styles.searchClose} onClick={() => { setIsSearchOpen(false); setSearchQuery(''); setSearchResults([]); }}><span className="material-symbols-outlined">close</span></button>
+                  <Link iconOnly className={styles.searchClose} onClick={() => { setIsSearchOpen(false); setSearchQuery(''); setSearchResults([]); }}><span className="material-symbols-outlined">close</span></Link>
                 </div>
                 {isSearchFetching && <p className={styles.searchHint}>Searching more messages…</p>}
                 <div className={styles.searchResults}>
@@ -847,19 +1020,19 @@ export default function Channel({ f7route }) {
               <div className={styles.replyBar}>
                 <span className="material-symbols-outlined">reply</span>
                 <span className={styles.replyBarBody}><strong>Replying to {replyingTo.authorName}</strong><span>{replyingTo.text || 'Attachment'}</span></span>
-                <button type="button" onClick={() => setReplyingTo(null)}><span className="material-symbols-outlined">close</span></button>
+                <Link iconOnly onClick={() => setReplyingTo(null)}><span className="material-symbols-outlined">close</span></Link>
               </div>
             )}
             {attachment && (
               <div className={styles.pendingAttachment}>
                 <span className="material-symbols-outlined">description</span>
                 <span className={styles.pendingName}>{attachment.name}</span>
-                <button type="button" onClick={() => setAttachment(null)}><span className="material-symbols-outlined">close</span></button>
+                <Link iconOnly onClick={() => setAttachment(null)}><span className="material-symbols-outlined">close</span></Link>
               </div>
             )}
             <div className={styles.composer}>
-              {isComposerMenuOpen && <div className={styles.composerMenu}><label className={styles.composerMenuItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach file<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFilePick(event); }} disabled={isUploading || !canSend} /></label><button type="button" className={styles.composerMenuItem} onClick={() => { setIsComposerMenuOpen(false); startPollCreation(); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerMenuItem} onClick={startGame}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}
-              <button type="button" className={styles.plusBtn} onClick={() => setIsComposerMenuOpen(open => !open)} disabled={!canSend} title="More composer actions"><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button>
+              {isComposerMenuOpen && <div className={styles.composerMenu}><label className={styles.composerMenuItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach file<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFilePick(event); }} disabled={isUploading || !canSend} /></label><Button type="button" className={styles.composerMenuItem} onClick={() => { setIsComposerMenuOpen(false); startPollCreation(); }}><span className="material-symbols-outlined">poll</span>Create Poll</Button><Button type="button" className={styles.composerMenuItem} onClick={startGame}><span className="material-symbols-outlined">sports_esports</span>Play a Game</Button></div>}
+              <Button type="button" round className={styles.plusBtn} onClick={() => setIsComposerMenuOpen(open => !open)} disabled={!canSend} title="More composer actions"><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></Button>
               <input
                 className={styles.composerInput}
                 value={newMessage}
@@ -868,9 +1041,9 @@ export default function Channel({ f7route }) {
                 onChange={event => handleComposerChange(event.target.value)}
                 onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); handleSend(); } }}
               />
-              <button type="button" className={styles.sendBtn} onClick={handleSend} disabled={!canSend || (!newMessage.trim() && !attachment)}>
+              <Button type="button" round fill className={styles.sendBtn} onClick={handleSend} disabled={!canSend || (!newMessage.trim() && !attachment)}>
                 <span className="material-symbols-outlined">send</span>
-              </button>
+              </Button>
             </div>
           </div>
         </>
