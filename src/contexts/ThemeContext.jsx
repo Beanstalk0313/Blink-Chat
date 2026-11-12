@@ -1,30 +1,77 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { updateCommunity, updateUserProfile } from '../services/db';
 import { useAuth } from './AuthContext';
 import { readStoredValue, writeStoredValue } from '../services/utils';
+import { THEMES, buildThemeTokens } from '../theme/palette';
 
 const ThemeContext = createContext(null);
 
-const themes = {
-  default: { label: 'Blink', primary: '#adc6ff', secondary: '#e9b3ff', background: '#131315', surface: '#1f1f21' },
-  ocean: { label: 'Ocean', primary: '#67e8f9', secondary: '#93c5fd', background: '#071a24', surface: '#0d2a38' },
-  forest: { label: 'Forest', primary: '#86efac', secondary: '#facc15', background: '#101b16', surface: '#1b2d23' },
-  sunset: { label: 'Sunset', primary: '#fdba74', secondary: '#fda4af', background: '#211416', surface: '#36201e' },
-  monochrome: { label: 'Mono', primary: '#f4f4f5', secondary: '#a1a1aa', background: '#111113', surface: '#242428' }
-};
+// Themes are palette specs (primary / accent / base), not stylesheets. See
+// src/theme/palette.js: every surface, outline, tint, glow and shadow token is
+// derived from those three colours, so any theme covers the whole app.
+const themes = THEMES;
 
 export function ThemeProvider({ children }) {
   const { currentUser } = useAuth();
   const [globalTheme, setGlobalTheme] = useState(() => typeof window !== 'undefined' ? readStoredValue('blink-theme', 'default') : 'default');
   const [communityThemes, setCommunityThemes] = useState({});
 
+  // Accessibility preferences. Reduced motion defaults to the OS setting the
+  // first time it is seen; after that the explicit choice wins everywhere.
+  const [reducedMotion, setReducedMotionState] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const stored = readStoredValue('blink-reduced-motion', null);
+    if (stored === 'true') return true;
+    if (stored === 'false') return false;
+    return Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+  });
+  const [highContrast, setHighContrastState] = useState(() => readStoredValue('blink-contrast', null) === 'true');
+
   useEffect(() => {
     writeStoredValue('blink-theme', globalTheme);
   }, [globalTheme]);
 
+  useEffect(() => {
+    writeStoredValue('blink-reduced-motion', String(reducedMotion));
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    writeStoredValue('blink-contrast', String(highContrast));
+  }, [highContrast]);
+
   const applyTheme = useCallback((themeId) => {
     if (themes[themeId]) setGlobalTheme(themeId);
   }, []);
+
+  const setReducedMotion = async (value) => {
+    setReducedMotionState(Boolean(value));
+    if (currentUser?.uid) await updateUserProfile(currentUser.uid, { reducedMotion: Boolean(value) });
+  };
+
+  const setHighContrast = async (value) => {
+    setHighContrastState(Boolean(value));
+    if (currentUser?.uid) await updateUserProfile(currentUser.uid, { highContrast: Boolean(value) });
+  };
+
+  const activeThemeId = themes[globalTheme] ? globalTheme : 'default';
+  const tokens = useMemo(
+    () => buildThemeTokens(themes[activeThemeId], { highContrast }),
+    [activeThemeId, highContrast]
+  );
+
+  // Tokens live on <html>, so every surface picks them up — the page
+  // background gradient, portals (modals, popovers, context menus) and the
+  // mobile browser chrome (theme-color). Previously only a wrapper div got a
+  // handful of variables, which is why most themes looked half-applied.
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.setAttribute('data-theme', activeThemeId);
+    root.dataset.reducedMotion = reducedMotion ? 'true' : 'false';
+    root.dataset.contrast = highContrast ? 'high' : 'normal';
+    Object.entries(tokens).forEach(([name, value]) => root.style.setProperty(name, value));
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', tokens['--color-app-background'] || tokens['--color-background']);
+  }, [tokens, activeThemeId, reducedMotion, highContrast]);
 
   const setTheme = async (themeId) => {
     applyTheme(themeId);
@@ -38,25 +85,22 @@ export function ThemeProvider({ children }) {
     await updateCommunity(communityId, { theme: themeId });
   };
 
-  const activeThemeId = globalTheme;
-  const activeTheme = themes[activeThemeId] || themes.default;
-  const style = useMemo(() => ({
-    '--color-primary': activeTheme.primary,
-    '--color-primary-container': activeTheme.primary,
-    '--color-secondary': activeTheme.secondary,
-    '--color-background': activeTheme.background,
-    '--color-surface': activeTheme.background,
-    '--color-surface-container': activeTheme.surface,
-    '--color-surface-container-high': activeTheme.surface,
-    '--color-surface-container-highest': activeTheme.surface,
-    '--color-on-primary': activeTheme.background,
-    '--color-on-background': '#f4f4f5',
-    '--color-on-surface': '#f4f4f5'
-  }), [activeTheme]);
+  const value = {
+    themes,
+    globalTheme: activeThemeId,
+    applyTheme,
+    setTheme,
+    communityThemes,
+    setCommunityTheme,
+    reducedMotion,
+    setReducedMotion,
+    highContrast,
+    setHighContrast
+  };
 
   return (
-    <ThemeContext.Provider value={{ themes, globalTheme, applyTheme, setTheme, communityThemes, setCommunityTheme }}>
-      <div data-theme={activeThemeId} style={style}>{children}</div>
+    <ThemeContext.Provider value={value}>
+      <div data-theme={activeThemeId}>{children}</div>
     </ThemeContext.Provider>
   );
 }

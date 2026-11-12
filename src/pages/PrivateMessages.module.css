@@ -1,7 +1,7 @@
 .sidebarBackdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: var(--color-scrim);
   z-index: 90;
 }
 
@@ -18,8 +18,8 @@
   flex-direction: column;
   flex-shrink: 0;
   margin-right: var(--unit);
-  background: var(--color-surface-container);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--glass-sidebar);
+  border: 1px solid var(--tint-subtle);
   overflow: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -33,7 +33,7 @@
   align-items: center;
   gap: 0.75rem;
   padding: 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--tint-subtle);
 }
 
 .sidebarHeading {
@@ -69,7 +69,7 @@
   gap: 0.5rem;
   margin: 0.75rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-sm);
   color: var(--color-tertiary);
 }
@@ -97,10 +97,10 @@
   display: flex;
   flex-direction: column;
   padding: 0.35rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-sm);
   background: var(--color-surface-container-high);
-  box-shadow: 0 1rem 2rem rgba(0, 0, 0, 0.35);
+  box-shadow: 0 1rem 2rem var(--color-shadow);
 }
 
 .searchResults button {
@@ -118,7 +118,7 @@
 }
 
 .searchResults button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--tint-hover);
 }
 
 .conversationList {
@@ -151,12 +151,12 @@
 
 .conversationItem:hover {
   color: var(--color-on-surface);
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--tint-hover);
 }
 
 .conversationItem.active {
   color: var(--color-primary);
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--tint-hover);
 }
 
 .conversationInfo {
@@ -187,7 +187,7 @@
 
 .userStatus {
   padding: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--tint-subtle);
 }
 
 .userInfo {
@@ -236,11 +236,11 @@
 }
 
 .online {
-  background: #4caf50;
+  background: var(--color-success);
 }
 
 .offline {
-  background: #8b90a0;
+  background: var(--color-outline);
 }
 
 .chatCanvas {
@@ -249,7 +249,7 @@
   min-width: 0;
   height: 100%;
   flex-direction: column;
-  background: rgba(14, 14, 16, 0.4);
+  background: var(--glass-canvas);
   overflow: hidden;
   position: relative;
 }
@@ -302,7 +302,7 @@
 .iconBtn:hover,
 .menuToggle:hover {
   color: var(--color-on-surface);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--tint-hover);
 }
 
 .iconBtn.active {
@@ -411,14 +411,14 @@
   max-width: 100%;
   padding: 0.75rem 1rem;
   color: var(--color-on-surface);
-  background: rgba(31, 31, 33, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--glass-bubble);
+  border: 1px solid var(--tint-subtle);
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
 }
 
 .sent .messageBubble {
-  background: rgba(75, 142, 255, 0.18);
+  background: var(--color-primary-soft);
 }
 
 .inputArea {
@@ -434,7 +434,7 @@
   margin: 0 auto;
   padding: 0.35rem;
   background: var(--color-surface-container-high);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-sm);
   position: relative;
 }
@@ -455,7 +455,7 @@
 
 .inputAction:hover {
   color: var(--color-on-surface);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--tint-hover);
 }
 
 .textInput {
@@ -467,41 +467,6 @@
   border: 0;
   outline: 0;
   font: var(--font-body-md);
-}
-
-.memberListSidebar {
-  width: 15rem;
-  flex-shrink: 0;
-  padding: 1rem;
-  overflow-y: auto;
-  background: rgba(0, 0, 0, 0.2);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.memberItem {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  width: 100%;
-  padding: 0.55rem;
-  color: var(--color-on-surface);
-  text-align: left;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.memberItem:hover {
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.memberItem .statusDot {
-  margin-left: auto;
-}
-
-.memberItem .statusDot::before {
-  display: none;
 }
 
 .emptyThread {
@@ -523,7 +488,7 @@
 }
 
 .emptyMenuToggle { display: none; position: absolute; top: 0.75rem; left: 0.75rem; align-items: center; justify-content: center; width: 2.75rem; height: 2.75rem; margin: 0; padding: 0; color: var(--color-tertiary); background: transparent; border: 0; border-radius: 50%; cursor: pointer; }
-.emptyMenuToggle:hover, .emptyMenuToggle:focus-visible { color: var(--color-on-surface); background: rgba(255, 255, 255, 0.08); }
+.emptyMenuToggle:hover, .emptyMenuToggle:focus-visible { color: var(--color-on-surface); background: var(--tint-hover); }
 .emptyMenuToggle .material-symbols-outlined { font-size: 1.5rem; }
 
 .emptyThread h2 {
@@ -543,7 +508,7 @@
 .loader {
   width: 2.5rem;
   height: 2.5rem;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--tint-active);
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: spin 1s linear infinite;
@@ -559,7 +524,7 @@
     inset: 0 auto 0 0;
     width: min(18rem, 82vw);
     margin: 0;
-    box-shadow: 12px 0 32px rgba(0, 0, 0, 0.35);
+    box-shadow: 12px 0 32px var(--color-shadow);
     transition: transform 0.25s ease;
   }
   .innerSidebar.closed {
@@ -567,13 +532,6 @@
   }
   .menuToggle {
     display: inline-flex;
-  }
-  .memberListSidebar {
-    position: absolute;
-    top: 4.5rem;
-    right: 0;
-    bottom: 0;
-    z-index: 30;
   }
   .emptyMenuToggle { display: inline-flex; }
 }

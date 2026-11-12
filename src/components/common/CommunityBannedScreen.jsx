@@ -10,10 +10,10 @@ export default function CommunityBannedScreen({ expirationTime }) {
   return (
     <div className={styles.bannedContainer}>
       <div className={styles.bannedCard}>
-        <span className="material-symbols-outlined" style={{ fontSize: '4rem', color: '#EF4444' }}>
+        <span className="material-symbols-outlined" style={{ fontSize: '4rem', color: 'var(--color-error)' }}>
           block
         </span>
-        <h1 className="text-display-xl" style={{ marginTop: '1rem', color: '#EF4444' }}>Access Denied</h1>
+        <h1 className="text-display-xl" style={{ marginTop: '1rem', color: 'var(--color-error)' }}>Access Denied</h1>
         <p className="text-body-lg" style={{ marginTop: '1rem', color: 'var(--color-tertiary)', textAlign: 'center', lineHeight: 1.6 }}>
           {isPermanent ? (
             <>You've been banned from this community permanently.</>

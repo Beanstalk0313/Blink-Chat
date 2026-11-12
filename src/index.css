@@ -2,42 +2,82 @@
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 :root {
-  /* Colors */
-  --color-surface: #131315;
-  --color-surface-dim: #131315;
-  --color-surface-bright: #39393b;
-  --color-surface-container-lowest: #0e0e10;
-  --color-surface-container-low: #1b1b1d;
-  --color-surface-container: #1f1f21;
-  --color-surface-container-high: #2a2a2c;
-  --color-surface-container-highest: #353437;
-  --color-on-surface: #e4e2e4;
-  --color-on-surface-variant: #c1c6d7;
-  --color-inverse-surface: #e4e2e4;
-  --color-inverse-on-surface: #303032;
-  --color-outline: #8b90a0;
-  --color-outline-variant: #414755;
-  --color-surface-tint: #adc6ff;
-  --color-primary: #adc6ff;
-  --color-on-primary: #002e69;
-  --color-primary-container: #4b8eff;
-  --color-on-primary-container: #00285c;
-  --color-inverse-primary: #005bc1;
-  --color-secondary: #e9b3ff;
-  --color-on-secondary: #510074;
-  --color-secondary-container: #7d01b1;
-  --color-on-secondary-container: #e5a9ff;
-  --color-tertiary: #c6c6c7;
-  --color-on-tertiary: #2f3131;
-  --color-tertiary-container: #909191;
-  --color-on-tertiary-container: #282a2a;
+  /* Colors — defaults for the Blink theme. ThemeContext overwrites
+     these on <html> from the active theme spec (src/theme/palette.js). */
+  --color-background: #0f1117;
+  --color-app-background: #181c27;
+  --color-on-background: #e5e5e5;
+  --color-surface: #0f1117;
+  --color-surface-dim: #0b0d11;
+  --color-surface-bright: #35373c;
+  --color-surface-container-lowest: #0b0d11;
+  --color-surface-container-low: #17191f;
+  --color-surface-container: #1c1e24;
+  --color-surface-container-high: #27292e;
+  --color-surface-container-highest: #323439;
+  --color-surface-variant: #27292e;
+  --color-surface-tint: #4b8eff;
+  --color-on-surface: #e5e5e5;
+  --color-on-surface-variant: #bebfc0;
+  --color-inverse-surface: #e5e5e5;
+  --color-inverse-on-surface: #0f1117;
+  --color-outline: #6f7074;
+  --color-outline-variant: #47484d;
+  --color-primary: #4b8eff;
+  --color-on-primary: #f4f8ff;
+  --color-primary-container: #3a6bbe;
+  --color-on-primary-container: #f3f6fb;
+  --color-inverse-primary: #81b0ff;
+  --color-secondary: #2563eb;
+  --color-on-secondary: #f2f6fe;
+  --color-secondary-container: #1f4cb0;
+  --color-on-secondary-container: #f2f4fa;
+  --color-tertiary: #a0a1a3;
+  --color-on-tertiary: #0f1117;
+  --color-tertiary-container: #3e4044;
+  --color-on-tertiary-container: #f3f4f4;
   --color-error: #ffb4ab;
-  --color-on-error: #690005;
+  --color-on-error: #1a1211;
   --color-error-container: #93000a;
   --color-on-error-container: #ffdad6;
-  --color-background: #131315;
-  --color-on-background: #e4e2e4;
-  --color-surface-variant: #353437;
+  --color-success: #7ee2a8;
+  --color-on-success: #0f1b14;
+  --color-success-container: #104f37;
+  --color-on-success-container: #b5f7d5;
+  --tint-faint: rgba(255, 255, 255, 0.03);
+  --tint-subtle: rgba(255, 255, 255, 0.05);
+  --tint-hover: rgba(255, 255, 255, 0.08);
+  --tint-active: rgba(255, 255, 255, 0.12);
+  --tint-strong: rgba(255, 255, 255, 0.2);
+  --tint-heavy: rgba(255, 255, 255, 0.3);
+  --color-border-faint: rgba(255, 255, 255, 0.05);
+  --color-border-subtle: rgba(255, 255, 255, 0.1);
+  --color-border-strong: rgba(255, 255, 255, 0.18);
+  --color-primary-soft: rgba(75, 142, 255, 0.12);
+  --color-primary-medium: rgba(75, 142, 255, 0.2);
+  --color-primary-strong: rgba(75, 142, 255, 0.4);
+  --color-primary-glow: rgba(75, 142, 255, 0.22);
+  --color-accent-soft: rgba(37, 99, 235, 0.12);
+  --color-accent-medium: rgba(37, 99, 235, 0.2);
+  --color-secondary-glow: rgba(37, 99, 235, 0.22);
+  --color-error-soft: rgba(255, 180, 171, 0.12);
+  --color-error-medium: rgba(255, 180, 171, 0.22);
+  --color-success-soft: rgba(126, 226, 168, 0.14);
+  --color-scrim: rgba(0, 0, 0, 0.55);
+  --color-scrim-strong: rgba(0, 0, 0, 0.78);
+  --color-shadow-weak: rgba(0, 0, 0, 0.2);
+  --color-shadow: rgba(0, 0, 0, 0.35);
+  --color-shadow-strong: rgba(0, 0, 0, 0.5);
+  --color-content: #1f242f;
+  --glass-content: rgba(31, 36, 47, 0.94);
+  --glass-canvas: rgba(31, 36, 47, 0.6);
+  --glass-bubble: rgba(42, 47, 58, 0.88);
+  --glass-sidebar: rgba(12, 15, 23, 0.96);
+  --glass-panel: rgba(28, 30, 36, 0.6);
+  --glass-strong: rgba(39, 41, 46, 0.82);
+  --glass-bar: rgba(15, 17, 23, 0.9);
+  --gradient-app: radial-gradient(circle at 10% 20%, rgba(75, 142, 255, 0.06) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(37, 99, 235, 0.06) 0%, transparent 40%);
+  --gradient-accent: linear-gradient(135deg, #4b8eff, #2563eb);
 
   /* Typography */
   --font-display-xl: 700 48px/1.1 'Space Grotesk', sans-serif;
@@ -46,7 +86,9 @@
   --font-body-lg: 400 18px/1.6 'Manrope', sans-serif;
   --font-body-md: 400 16px/1.6 'Manrope', sans-serif;
   --font-label-md: 600 14px/1.4 'Manrope', sans-serif;
+  --font-label-lg: 600 16px/1.4 'Manrope', sans-serif;
   --font-label-sm: 500 12px/1.4 'Manrope', sans-serif;
+  --font-body-sm: 400 14px/1.5 'Manrope', sans-serif;
 
   /* Spacing */
   --unit: 8px;
@@ -72,14 +114,13 @@
 }
 
 body {
-  background-color: var(--color-background);
+  background-color: var(--color-app-background);
   color: var(--color-on-background);
   font: var(--font-body-md);
   margin: 0;
   min-height: 100vh;
-  /* Liquid Glass Background */
-  background-image: radial-gradient(circle at 10% 20%, rgba(173, 198, 255, 0.05) 0%, transparent 40%),
-                    radial-gradient(circle at 90% 80%, rgba(233, 179, 255, 0.05) 0%, transparent 40%);
+  /* Liquid Glass Background (derived from the active theme's brand colours) */
+  background-image: var(--gradient-app);
   background-attachment: fixed;
   overflow: hidden;
   display: flex;
@@ -101,18 +142,18 @@ body {
 
 /* Base Utility Classes */
 .glass-panel {
-  background-color: rgba(31, 31, 33, 0.6);
+  background-color: var(--glass-panel);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border-faint);
 }
 
 .glass-floating {
-  background-color: rgba(42, 42, 44, 0.8);
+  background-color: var(--glass-strong);
   backdrop-filter: blur(24px) saturate(200%);
   -webkit-backdrop-filter: blur(24px) saturate(200%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 40px rgba(173, 198, 255, 0.05);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow: 0 0 40px var(--color-primary-soft);
 }
 
 .liquid-hover {
@@ -120,7 +161,7 @@ body {
 }
 
 .liquid-hover:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--tint-active);
   transform: scale(1.02);
   backdrop-filter: blur(20px) saturate(200%);
   -webkit-backdrop-filter: blur(20px) saturate(200%);
@@ -143,7 +184,7 @@ body {
 .loader {
   width: 2.5rem;
   height: 2.5rem;
-  border: 3px solid rgba(255, 255, 255, 0.1);
+  border: 3px solid var(--color-border-subtle);
   border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: loader-spin 1s linear infinite;
@@ -172,4 +213,61 @@ body {
 .bottomNavItem:focus-visible,
 .topBarActions a:focus-visible {
   outline: none;
+}
+
+/* Blink-styled range sliders (native track/thumb replaced so every slider
+   matches the design system instead of the OS default). */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--tint-active);
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 2px 6px var(--color-shadow);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 3px solid var(--color-surface);
+  box-shadow: 0 2px 6px var(--color-shadow);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--tint-active);
+}
+
+/* Accessibility: the Appearance setting disables animation app-wide. */
+html[data-reduced-motion="true"] *,
+html[data-reduced-motion="true"] *::before,
+html[data-reduced-motion="true"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+html[data-reduced-motion="true"] {
+  scroll-behavior: auto;
 }

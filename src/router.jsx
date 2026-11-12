@@ -16,6 +16,7 @@ const Settings = lazyWithRecovery(() => import('./pages/Settings'));
 const CreateCommunity = lazyWithRecovery(() => import('./pages/CreateCommunity'));
 const CommunitySettings = lazyWithRecovery(() => import('./pages/CommunitySettings'));
 const PrivateMessages = lazyWithRecovery(() => import('./pages/PrivateMessages'));
+const Friends = lazyWithRecovery(() => import('./pages/Friends'));
 const JoinCommunity = lazyWithRecovery(() => import('./pages/JoinCommunity'));
 const WhatsNew = lazyWithRecovery(() => import('./pages/WhatsNew'));
 
@@ -88,6 +89,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<PageLoader />}>
             <PrivateMessages />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'friends',
+        element: (
+          <Suspense fallback={<PageLoader />}>
+            <Friends />
           </Suspense>
         ),
       },

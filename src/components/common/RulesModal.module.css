@@ -36,7 +36,7 @@
   align-items: flex-start;
   gap: 1rem;
   padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--tint-subtle);
   border-radius: var(--radius-md);
   border-left: 4px solid var(--color-primary);
 }
@@ -45,7 +45,7 @@
   width: 100%;
   padding: 1rem;
   background-color: var(--color-primary);
-  color: white;
+  color: var(--color-on-primary);
   border: none;
   border-radius: var(--radius-md);
   font: var(--font-label-md);
@@ -54,6 +54,6 @@
 }
 
 .acceptBtn:hover {
-  background-color: #2563eb;
+  background-color: var(--color-primary);
   transform: translateY(-2px);
 }

@@ -153,6 +153,26 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Desktop game presence: only the Tauri shell can see running processes. It
+  // restarts when the setting changes, and stops publishing as soon as the
+  // account signs out.
+  useEffect(() => {
+    if (!currentUser?.uid) return undefined;
+    const enabled = currentUser?.profile?.gameActivity !== false;
+    const uid = currentUser.uid;
+    let stop;
+    let cancelled = false;
+    import('../services/gamePresence')
+      .then(({ startGamePresence }) => {
+        if (!cancelled) stop = startGamePresence(uid, () => enabled);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      stop?.();
+    };
+  }, [currentUser?.uid, currentUser?.profile?.gameActivity]);
+
   const getCurrentAuth = async () => {
     const { getAuth } = await getAuthTools();
     return authRef.current || getAuth(app);

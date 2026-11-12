@@ -1,4 +1,5 @@
 import { firestore, db } from '../firebase/data';
+import { canSendPrivateMessage } from './friends';
 import { buildMemberPermissions, migrateLegacyCommunity, normalizeRoleIds } from './permissions';
 import { mentionsUser } from './utils';
 import {
@@ -22,6 +23,8 @@ import {
   update,
   remove,
   onValue,
+  onChildChanged,
+  onChildRemoved,
   onDisconnect,
   query as rtdbQuery,
   limitToLast,
@@ -245,15 +248,17 @@ export function startPresence(uid) {
   const connectedUnsubscribe = onValue(connectedRef, snapshot => {
     if (snapshot.val() !== true) return;
     onDisconnect(presenceRef).set({ online: false, lastSeen: Date.now() });
-    set(presenceRef, { online: true, lastSeen: Date.now() });
+    // update(), not set(): the game activity written by gamePresence lives on
+    // the same node and must survive the online/lastSeen writes.
+    update(presenceRef, { online: true, lastSeen: Date.now() });
   });
   const heartbeat = window.setInterval(() => {
-    set(presenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
+    update(presenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
   }, 60000);
   return () => {
     window.clearInterval(heartbeat);
     connectedUnsubscribe();
-    set(presenceRef, { online: false, lastSeen: Date.now() }).catch(() => {});
+    update(presenceRef, { online: false, lastSeen: Date.now() }).catch(() => {});
   };
 }
 
@@ -418,7 +423,7 @@ export async function sendMessage(channelId, text, authorUid, attachment = null,
   };
   if (options.replyTo) message.replyTo = options.replyTo;
   if (options.poll) message.poll = options.poll;
-  if (options.game) message.game = { ...options.game, moves: {} };
+  if (options.game) message.game = { ...options.game, status: options.game.status || 'pending', moves: {} };
   await set(newMessageRef, message);
   // Best-effort metadata only: the message is already stored in RTDB, so a
   // Firestore hiccup here must not make the UI report the message as failed.
@@ -432,6 +437,16 @@ export async function submitGameMove(channelId, messageId, uid, cell, mark) {
   if (!db || !channelId || !messageId || !uid) return;
   const moveRef = push(ref(db, `messages/${channelId}/${messageId}/game/moves`));
   await set(moveRef, { uid, cell, mark, timestamp: Date.now() });
+}
+
+export async function acceptGameChallenge(channelId, messageId) {
+  if (!db || !channelId || !messageId) return;
+  await update(ref(db, `messages/${channelId}/${messageId}/game`), { status: 'active' });
+}
+
+export async function declineGameChallenge(channelId, messageId) {
+  if (!db || !channelId || !messageId) return;
+  await update(ref(db, `messages/${channelId}/${messageId}/game`), { status: 'declined' });
 }
 
 export async function editMessage(channelId, messageId, newText) {
@@ -531,17 +546,43 @@ export async function searchChannelMessages(channelId, query) {
 // Session-scoped cache of channel messages so reopening a channel does not re-read everything.
 const messagesCache = new Map(); // channelId -> { messages, oldestTimestamp, newestTimestamp, lastLimit }
 
+// Compares whole messages, not just a hand-picked list of fields. Games change
+// through nested children (game/moves, game/status), and polls, reactions and
+// reply metadata change without touching text or timestamp. Comparing only
+// those old fields made every such update look identical, so the callback was
+// suppressed and the UI only caught up after a remount (which is why a game
+// board needed a page switch to show the other player's move).
 function messagesAreEqual(firstMessages, secondMessages) {
   if (firstMessages.length !== secondMessages.length) return false;
-  return firstMessages.every((message, index) => {
-    const other = secondMessages[index];
-    return message.id === other.id
-      && message.text === other.text
-      && message.timestamp === other.timestamp
-      && message.authorUid === other.authorUid
-      && message.isPinned === other.isPinned
-      && JSON.stringify(message.attachment || null) === JSON.stringify(other.attachment || null);
-  });
+  return firstMessages.every((message, index) => JSON.stringify(message) === JSON.stringify(secondMessages[index]));
+}
+
+// Push IDs embed the generation time in their first 8 characters (base-64,
+// most significant first). The SDK generates them from server-normalized time
+// (Date.now() + serverTimeOffset), which can disagree with the raw client
+// clock we store as the message timestamp when the offset is stale.
+const PUSH_CHARS = '-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz';
+
+function pushIdTimestamp(pushId) {
+  if (typeof pushId !== 'string' || pushId.length < 8) return 0;
+  let value = 0;
+  for (let i = 0; i < 8; i += 1) {
+    const digit = PUSH_CHARS.indexOf(pushId[i]);
+    if (digit === -1) return 0;
+    value = value * 64 + digit;
+  }
+  return value;
+}
+
+// Messages are ordered by their stored timestamp, with the push ID as the
+// tie-breaker (same-millisecond writes) and as the fallback when a timestamp
+// is missing. Timestamp-first keeps the list in the order the timestamps on
+// screen claim; the push ID keeps same-ms writes deterministic.
+export function compareMessages(first, second) {
+  const firstTime = Number(first?.timestamp) || pushIdTimestamp(first?.id);
+  const secondTime = Number(second?.timestamp) || pushIdTimestamp(second?.id);
+  if (firstTime !== secondTime) return firstTime - secondTime;
+  return String(first.id).localeCompare(String(second.id));
 }
 
 function mergeMessagesById(...groups) {
@@ -551,9 +592,7 @@ function mergeMessagesById(...groups) {
       if (message && message.id) byId.set(message.id, message);
     }
   }
-  // RTDB push IDs contain a millisecond timestamp plus a monotonic/random
-  // suffix, and are the only ordering key shared consistently by devices.
-  return [...byId.values()].sort((first, second) => String(first.id).localeCompare(String(second.id)));
+  return [...byId.values()].sort(compareMessages);
 }
 
 export function subscribeToMessages(channelId, callback, limitCount = 50) {
@@ -581,8 +620,12 @@ export function subscribeToMessages(channelId, callback, limitCount = 50) {
     const fresh = data
       ? Object.entries(data).map(([id, message]) => ({ id, ...message }))
       : [];
-    const merged = mergeMessagesById(cachedMessages, fresh);
-    const previousMessages = messagesCache.get(channelId)?.messages || cachedMessages;
+    // Merge against the live cache, not the closure snapshot: deletions are
+    // applied to the cache by the child-removed listener below, and merging
+    // against a stale closure would resurrect deleted messages.
+    const base = messagesCache.get(channelId)?.messages || cachedMessages;
+    const merged = mergeMessagesById(base, fresh);
+    const previousMessages = base;
     messagesCache.set(channelId, {
       messages: merged,
       oldestTimestamp: merged.length ? merged[0].timestamp || 0 : 0,
@@ -592,11 +635,55 @@ export function subscribeToMessages(channelId, callback, limitCount = 50) {
     if (!deliveredCachedMessages || !messagesAreEqual(previousMessages, merged)) callback(merged);
   });
 
+  // Watch for changes on the whole message path: the bounded value query above
+  // only reports messages inside its window, so pin toggles, edits, reactions
+  // and game moves on OLDER messages would never surface until a reload.
+  const changeUnsubscribe = onChildChanged(messagesRef, snapshot => {
+    const changed = snapshot.val();
+    if (!changed || typeof changed !== 'object') return;
+    const changedMessage = { id: snapshot.key, ...changed };
+    const current = messagesCache.get(channelId)?.messages || cachedMessages;
+    const index = current.findIndex(message => message.id === changedMessage.id);
+    if (index === -1) return; // not inside our loaded window — nothing to update
+    const next = [...current];
+    next[index] = changedMessage;
+    next.sort(compareMessages);
+    messagesCache.set(channelId, {
+      messages: next,
+      oldestTimestamp: next.length ? next[0].timestamp || 0 : 0,
+      newestTimestamp: next.length ? next[next.length - 1].timestamp || 0 : 0,
+      lastLimit: Math.max(entry?.lastLimit || 0, limitCount)
+    });
+    if (!messagesAreEqual(current, next)) callback(next);
+  });
+
+  // Watch for deletions on the whole message path: the bounded value query
+  // above only reports messages inside its window, so a deletion would never
+  // surface as "missing" and the removed message would survive in the merged
+  // cache until a reload.
+  const removeUnsubscribe = onChildRemoved(messagesRef, snapshot => {
+    const removedId = snapshot.key;
+    const current = messagesCache.get(channelId)?.messages || cachedMessages;
+    const next = current.filter(message => message.id !== removedId);
+    if (next.length === current.length) return;
+    messagesCache.set(channelId, {
+      messages: next,
+      oldestTimestamp: next.length ? next[0].timestamp || 0 : 0,
+      newestTimestamp: next.length ? next[next.length - 1].timestamp || 0 : 0,
+      lastLimit: Math.max(entry?.lastLimit || 0, limitCount)
+    });
+    callback(next);
+  });
+
   if (cachedMessages.length) {
     deliveredCachedMessages = true;
     callback(cachedMessages);
   }
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    changeUnsubscribe();
+    removeUnsubscribe();
+  };
 }
 
 export function getCachedMessages(channelId) {
@@ -658,8 +745,17 @@ export function subscribeToUserChannelMessages(uid, communityIds = [], callback,
   };
 }
 
-// Unread tracking
-export async function updateLastRead(uid, channelId, readThroughTimestamp = Date.now()) {
+// Unread tracking.
+//
+// Writes are serialised per channel. The chat view (message arrives / scroll)
+// and the global interaction listener can ask to mark the same channel read
+// milliseconds apart, and two overlapping Firestore transactions on one
+// document make the SDK reject and retry commits ("already-exists" /
+// "failed-precondition" in the console). Queueing them keeps the marker
+// monotonic and means one write instead of a retry storm.
+const lastReadQueues = new Map();
+
+async function writeLastRead(uid, channelId, readThroughTimestamp) {
   const readRef = doc(collection(doc(firestore, 'users', uid), 'lastRead'), channelId);
   await runTransaction(firestore, async transaction => {
     const snapshot = await transaction.get(readRef);
@@ -672,6 +768,21 @@ export async function updateLastRead(uid, channelId, readThroughTimestamp = Date
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('blink:unread-changed', { detail: { uid, channelId } }));
   }
+}
+
+export function updateLastRead(uid, channelId, readThroughTimestamp = Date.now()) {
+  const key = `${uid}:${channelId}`;
+  const previous = lastReadQueues.get(key) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => writeLastRead(uid, channelId, readThroughTimestamp));
+  lastReadQueues.set(key, next);
+  next
+    .catch(() => {})
+    .then(() => {
+      if (lastReadQueues.get(key) === next) lastReadQueues.delete(key);
+    });
+  return next;
 }
 
 export async function getUnreadCounts(uid, communityIds = []) {
@@ -692,7 +803,12 @@ export async function getUnreadCounts(uid, communityIds = []) {
         if (notificationPreferences.channelModes?.[channel.id] === 'none') return false;
         const lastReadTime = readResults[index].exists() ? readResults[index].data().timestamp : 0;
         const latestMessage = latestMessages[index]?.exists() ? Object.values(latestMessages[index].val() || {})[0] : null;
-        const latestActivity = Math.max(channel.lastActivity || 0, latestMessage?.timestamp || 0);
+        // Compare against the newest message's own timestamp, never the
+        // channel's lastActivity: lastActivity is also bumped by edits and
+        // pins made on other devices and is written with the writer's clock,
+        // so a skewed clock could keep a channel unread forever even after it
+        // was opened. lastActivity is only the fallback for empty channels.
+        const latestActivity = Number(latestMessage?.timestamp) || Number(channel.lastActivity) || 0;
         return latestActivity > lastReadTime;
       }).map(channel => ({ id: channel.id, name: channel.name, count: 'New' }));
       return [communityId, { name: community?.name, channels: unreadChannels }];
@@ -704,34 +820,47 @@ export async function getUnreadCounts(uid, communityIds = []) {
 
 // Count unread @ mentions separately so the UI can show a number for mentions
 // and only a dot for ordinary unread channel activity.
+// Shared mention-count core: returns { channelId: { count, communityId } } for
+// every text channel with unread mentions of the current user, respecting
+// mute preferences and per-channel notification modes.
+async function unreadMentionCountsPerChannel(uid, communityIds) {
+  if (!uid || !communityIds.length || !db) return {};
+  const userSnap = await getDoc(doc(firestore, 'users', uid));
+  const profile = userSnap.exists() ? userSnap.data() : {};
+  const preferences = profile.notificationPreferences || {};
+  const currentDisplayName = (profile.displayName || '').trim().toLowerCase();
+  const communityChannels = await Promise.all(communityIds
+    .filter(communityId => !preferences.communityMuted?.[communityId])
+    .map(getChannels));
+  const channels = communityChannels.flat().filter(channel => channel.type !== 'voice');
+  const results = await Promise.all(channels.map(async channel => {
+    const mode = preferences.channelModes?.[channel.id] || 'mentions';
+    if (mode === 'none') return 0;
+    const lastReadSnap = await getDoc(doc(firestore, 'users', uid, 'lastRead', channel.id));
+    const lastReadTime = lastReadSnap.exists() ? lastReadSnap.data().timestamp : 0;
+    const messagesSnap = await get(rtdbQuery(ref(db, `messages/${channel.id}`), orderByChild('timestamp'), startAt(lastReadTime + 1), limitToLast(300)));
+    const messages = messagesSnap.exists() ? Object.values(messagesSnap.val()) : [];
+    return messages.filter(message => {
+      if (!message || message.authorUid === uid) return false;
+      // Replies to you count exactly like an @mention: they put a number on the
+      // unread badge and are announced.
+      return mentionsUser(message.text, currentDisplayName) || message.replyTo?.authorUid === uid;
+    }).length;
+  }));
+  const perChannel = {};
+  channels.forEach((channel, index) => {
+    if (results[index] > 0) perChannel[channel.id] = { count: results[index], communityId: channel.communityId };
+  });
+  return perChannel;
+}
+
 export async function getUnreadMentionCountsByCommunity(uid, communityIds = []) {
   if (!uid || !communityIds.length) return {};
   return cached(`unread-mentions:${uid}:by-community:${communityIds.join(',')}`, async () => {
-    const userSnap = await getDoc(doc(firestore, 'users', uid));
-    const profile = userSnap.exists() ? userSnap.data() : {};
-    const preferences = profile.notificationPreferences || {};
-    const currentDisplayName = (profile.displayName || '').trim().toLowerCase();
-    if (!db) return {};
-    const communityChannels = await Promise.all(communityIds
-      .filter(communityId => !preferences.communityMuted?.[communityId])
-      .map(getChannels));
-    const channels = communityChannels.flat().filter(channel => channel.type !== 'voice');
-    const results = await Promise.all(channels.map(async channel => {
-      const mode = preferences.channelModes?.[channel.id] || 'mentions';
-      if (mode === 'none') return 0;
-      const lastReadSnap = await getDoc(doc(firestore, 'users', uid, 'lastRead', channel.id));
-      const lastReadTime = lastReadSnap.exists() ? lastReadSnap.data().timestamp : 0;
-      const messagesSnap = await get(rtdbQuery(ref(db, `messages/${channel.id}`), orderByChild('timestamp'), startAt(lastReadTime + 1), limitToLast(300)));
-      const messages = messagesSnap.exists() ? Object.values(messagesSnap.val()) : [];
-      return messages.filter(message => {
-        if (!message || message.authorUid === uid) return false;
-        return mentionsUser(message.text, currentDisplayName);
-      }).length;
-    }));
+    const perChannel = await unreadMentionCountsPerChannel(uid, communityIds);
     const byCommunity = {};
-    channels.forEach((channel, index) => {
-      const communityId = channel.communityId;
-      byCommunity[communityId] = (byCommunity[communityId] || 0) + results[index];
+    Object.values(perChannel).forEach(({ count, communityId }) => {
+      byCommunity[communityId] = (byCommunity[communityId] || 0) + count;
     });
     return byCommunity;
   });
@@ -745,10 +874,24 @@ export async function getUnreadMentionCounts(uid, communityIds = []) {
 // Marks every text channel in a community as read for the user.
 export async function markAllChannelsRead(uid, communityId) {
   const channels = await getChannels(communityId);
+  const textChannels = channels.filter(channel => channel.type !== 'voice');
+  // The marker has to cover the newest message actually in each channel, not
+  // just this device's clock: a message written by a device running ahead would
+  // otherwise stay unread after "mark all as read".
+  const latestTimestamps = db
+    ? await Promise.all(textChannels.map(channel => get(
+      rtdbQuery(ref(db, `messages/${channel.id}`), orderByChild('timestamp'), limitToLast(1))
+    ).then(snapshot => {
+      const latest = snapshot.exists() ? Object.values(snapshot.val() || {})[0] : null;
+      return Number(latest?.timestamp) || 0;
+    }).catch(() => 0)))
+    : [];
   const timestamp = Date.now();
-  await Promise.all(channels
-    .filter(channel => channel.type !== 'voice')
-    .map(channel => setDoc(doc(collection(doc(firestore, 'users', uid), 'lastRead'), channel.id), { timestamp }, { merge: true })));
+  await Promise.all(textChannels.map((channel, index) => setDoc(
+    doc(collection(doc(firestore, 'users', uid), 'lastRead'), channel.id),
+    { timestamp: Math.max(timestamp, latestTimestamps[index] || 0) },
+    { merge: true }
+  )));
   clearSessionCache(`unread:${uid}`);
   clearSessionCache(`unread-mentions:${uid}`);
   if (typeof window !== 'undefined') {
@@ -769,8 +912,83 @@ export async function searchUsers(searchTerm, currentUid) {
     .slice(0, 8);
 }
 
+// Exact-name lookup used for friend requests: the display name has to match in
+// full (case and surrounding spaces ignored). Substring search made it easy to
+// enumerate people you had never spoken to, so friend requests no longer get a
+// fuzzy match to work from.
+export async function findUserByExactDisplayName(displayName, currentUid) {
+  const normalized = String(displayName || '').trim().toLowerCase();
+  if (!normalized) return null;
+  const users = await cached('users:directory', async () => {
+    const snapshot = await getDocs(collection(firestore, 'users'));
+    return snapshot.docs.map(userDoc => ({ uid: userDoc.id, ...userDoc.data() }));
+  });
+  return users.find(user => user.uid !== currentUid && String(user.displayName || '').trim().toLowerCase() === normalized) || null;
+}
+
 export function privateConversationId(firstUid, secondUid) {
   return [firstUid, secondUid].sort().join('_');
+}
+
+// A brand-new private conversation has no RTDB node until the first message is
+// sent, and reading messages of a non-existent conversation is denied by the
+// rules. Call this when a new PM is opened so the members/participants
+// metadata exists before the messages subscription attaches. The transaction
+// writes nothing when the conversation already exists (keeps lastMessage and
+// friends intact), and the fallback below merges member flags only, so an
+// existing conversation cannot be overwritten even if its index entry is
+// missing.
+export async function ensurePrivateConversation(conversationId, firstUid, secondUid, participants = {}) {
+  if (!db) return;
+  const sortedMembers = [firstUid, secondUid].sort();
+  const conversationRef = ref(db, `privateConversations/${conversationId}`);
+  const freshConversation = {
+    members: { [sortedMembers[0]]: true, [sortedMembers[1]]: true },
+    participants,
+    updatedAt: 0
+  };
+
+  try {
+    await runDatabaseTransaction(conversationRef, current => {
+      if (current) return undefined; // already exists — leave it alone
+      return freshConversation;
+    });
+    return;
+  } catch (error) {
+    // A brand-new conversation has no node yet, and the RTDB rules only let a
+    // member read an existing conversation, so the transaction's read is
+    // denied by design. Fall through to a direct create below; only that
+    // permission denial is recoverable, everything else is a real failure.
+    if (error?.code !== 'PERMISSION_DENIED') throw error;
+  }
+
+  // The per-user index is readable by its owner and is absent for a brand-new
+  // conversation, so it is a safe check before creating.
+  const indexRef = ref(db, `privateConversationsByUser/${firstUid}/${conversationId}`);
+  const indexSnap = await get(indexRef).catch(() => null);
+  if (indexSnap?.exists()) return;
+
+  // Merge, never set. `update` writes each member flag and each participant
+  // entry as its own child path, so this can never wipe a conversation that
+  // exists but whose index entry was missing (a stale index, a failed index
+  // write, or a second client racing us): lastMessage, updatedAt, messages and
+  // the other participant's profile stay exactly as they were. `set` here would
+  // have replaced the whole node with the empty template above.
+  const patch = {
+    [`members/${sortedMembers[0]}`]: true,
+    [`members/${sortedMembers[1]}`]: true
+  };
+  for (const [uid, profile] of Object.entries(participants || {})) {
+    if (uid !== sortedMembers[0] && uid !== sortedMembers[1]) continue;
+    patch[`participants/${uid}`] = profile;
+  }
+
+  try {
+    await update(conversationRef, patch);
+  } catch (error) {
+    // A concurrent writer created it first; its metadata wins.
+    if (error?.code !== 'PERMISSION_DENIED') throw error;
+  }
 }
 
 export async function getPrivateConversations(uid) {
@@ -782,8 +1000,15 @@ export async function getPrivateConversations(uid) {
     const indexData = indexSnap.val() || {};
     const conversations = await Promise.all(
       conversationIds.map(async id => {
-        const snap = await get(ref(db, `privateConversations/${id}`));
-        return snap.exists() ? { id, ...snap.val(), lastReadAt: indexData[id]?.lastReadAt || 0 } : null;
+        try {
+          const snap = await get(ref(db, `privateConversations/${id}`));
+          return snap.exists() ? { id, ...snap.val(), lastReadAt: indexData[id]?.lastReadAt || 0 } : null;
+        } catch {
+          // A stale index entry whose conversation is gone (or a conversation
+          // this account is no longer a member of) must not fail the whole
+          // list: skip that row instead of throwing permission_denied.
+          return null;
+        }
       })
     );
     const filtered = conversations.filter(Boolean);
@@ -885,7 +1110,7 @@ export function subscribeToPrivateMessages(conversationId, callback, onError) {
     const messages = data
       ? Object.entries(data).map(([id, message]) => ({ id, ...message }))
       : [];
-    messages.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    messages.sort(compareMessages);
       callback(messages);
     }, error => {
       if (!active) return;
@@ -915,9 +1140,23 @@ export async function sendPrivateMessage(conversationId, senderUid, recipientUid
   const trimmedText = text.trim();
   if (!trimmedText) return;
 
-  const recipientProfile = await getUserProfile(recipientUid);
-  if (recipientProfile?.blockPrivateMessages) {
-    throw new Error('This user has disabled private messages.');
+  // Privacy is decided in one place (services/friends) so the Message button
+  // and the send path cannot disagree. RTDB rules cannot read Firestore, so
+  // this is the enforcement point, exactly like the old blockPrivateMessages
+  // flag it replaces.
+  const [recipientProfile, senderProfile] = await Promise.all([
+    getUserProfile(recipientUid),
+    getUserProfile(senderUid)
+  ]);
+  const privacy = await canSendPrivateMessage(senderUid, recipientUid, { recipientProfile, senderProfile });
+  if (!privacy.allowed) {
+    throw new Error(privacy.reason === 'blocked'
+      ? 'This user is not accepting your messages.'
+      : privacy.reason === 'youBlocked'
+        ? 'Unblock this user before messaging them.'
+        : privacy.reason === 'privacy'
+          ? 'This user only accepts messages from their friends.'
+          : 'You cannot message this user.');
   }
 
   if (!db) throw new Error('Realtime Database is not configured');
@@ -955,7 +1194,29 @@ export async function markPrivateConversationRead(uid, conversationId, readThrou
 
 export async function deletePrivateMessage(conversationId, messageId) {
   if (!db) return;
+  const messagesRef = ref(db, `privateConversations/${conversationId}/messages`);
   await remove(ref(db, `privateConversations/${conversationId}/messages/${messageId}`));
+  // Removing the newest message used to leave its text as the conversation
+  // preview (and its timestamp as updatedAt), so the sidebar and the
+  // conversation list kept advertising a message that no longer existed.
+  let remaining;
+  try {
+    const snapshot = await get(messagesRef);
+    remaining = snapshot.exists() ? Object.values(snapshot.val() || {}).filter(Boolean) : [];
+  } catch (error) {
+    console.warn('Could not refresh the conversation preview:', error);
+    return;
+  }
+  const newest = remaining.sort((first, second) => (Number(second?.timestamp) || 0) - (Number(first?.timestamp) || 0))[0];
+  try {
+    await update(ref(db, `privateConversations/${conversationId}`), {
+      lastMessage: newest?.text || null,
+      lastSenderUid: newest?.senderUid || null,
+      updatedAt: Number(newest?.timestamp) || 0
+    });
+  } catch (error) {
+    console.warn('Could not refresh the conversation preview:', error);
+  }
 }
 
 // User Profile

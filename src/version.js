@@ -1,6 +1,11 @@
 import pkg from '../package.json';
+import { CHANGELOG } from './changelog';
 
-export const APP_VERSION = pkg.version;
+// The app version is the newest block in src/changelog.md (newest first).
+// Publishing a new "What's new" entry automatically becomes the new app
+// version, which is what makes the What's New screen open for everyone on
+// first launch. package.json is only a fallback/consistency value.
+export const APP_VERSION = CHANGELOG[0]?.version || pkg.version;
 
 const SEEN_VERSIONS_KEY = 'blink-seen-versions';
 

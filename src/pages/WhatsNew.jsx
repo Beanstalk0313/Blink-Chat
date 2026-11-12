@@ -1,10 +1,9 @@
-import { Link } from 'react-router-dom';
 import { APP_VERSION } from '../version';
 import { CHANGELOG } from '../changelog';
 import styles from './WhatsNew.module.css';
 
-// Web "What's new" screen: the versioned changelog, ported from the native
-// app. Entries come from src/changelog.md, which is edited by hand.
+// Web "What's new" screen: the versioned changelog. Entries come from
+// src/changelog.md, which is edited by hand.
 export default function WhatsNew() {
   return (
     <div className={styles.page}>
@@ -36,10 +35,6 @@ export default function WhatsNew() {
           <p>No changelog entries yet.</p>
         </div>
       )}
-
-      <p style={{ textAlign: 'center' }}>
-        <Link to="/settings" className="text-label-sm text-tertiary">Back to Blink</Link>
-      </p>
     </div>
   );
 }

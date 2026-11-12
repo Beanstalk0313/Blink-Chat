@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/common/UserAvatar';
 import {
+  ensurePrivateConversation,
   getPrivateConversations,
   getUserProfile,
   markPrivateConversationRead,
@@ -15,6 +16,11 @@ import {
   deletePrivateMessage
 } from '../services/db';
 import styles from './PrivateMessages.module.css';
+
+// Marking a PM conversation read is a transaction per write, and the page does
+// it on every pointer/key event. One write per burst is enough: the marker is
+// monotonic, so a trailing write covers everything that happened before it.
+const PM_READ_THROTTLE_MS = 1200;
 
 function otherParticipant(conversation, uid) {
   const participantEntries = Object.entries(conversation?.participants || {});
@@ -41,6 +47,39 @@ export default function PrivateMessages() {
   const messagesEndRef = useRef(null);
   const initialLoad = useRef(true);
   const handledUserParam = useRef(false);
+  const readMarkTimerRef = useRef(0);
+  const readMarkLastWriteRef = useRef(0);
+  const latestMessageTimestampRef = useRef(0);
+
+  const flushConversationRead = useCallback(readThrough => {
+    if (!uid || !selectedConversationId) return;
+    if (readMarkTimerRef.current) {
+      window.clearTimeout(readMarkTimerRef.current);
+      readMarkTimerRef.current = 0;
+    }
+    readMarkLastWriteRef.current = Date.now();
+    const timestamp = Number(readThrough) || latestMessageTimestampRef.current || undefined;
+    markPrivateConversationRead(uid, selectedConversationId, timestamp).catch(() => {});
+  }, [uid, selectedConversationId]);
+
+  const scheduleConversationRead = useCallback(readThrough => {
+    if (!uid || !selectedConversationId) return;
+    const timestamp = Number(readThrough) || latestMessageTimestampRef.current || undefined;
+    if (readMarkTimerRef.current) window.clearTimeout(readMarkTimerRef.current);
+    const elapsed = Date.now() - readMarkLastWriteRef.current;
+    readMarkTimerRef.current = window.setTimeout(
+      () => flushConversationRead(timestamp),
+      Math.max(0, PM_READ_THROTTLE_MS - elapsed),
+    );
+  }, [uid, selectedConversationId, flushConversationRead]);
+
+  // Leaving a conversation (or the page) still marks it read, exactly once.
+  useEffect(() => () => {
+    if (!readMarkTimerRef.current) return;
+    window.clearTimeout(readMarkTimerRef.current);
+    readMarkTimerRef.current = 0;
+    flushConversationRead();
+  }, [flushConversationRead]);
 
   useEffect(() => {
     const handleResize = () => setIsSidebarOpen(window.innerWidth > 1024);
@@ -70,6 +109,7 @@ export default function PrivateMessages() {
     initialLoad.current = true;
     return subscribeToPrivateMessages(selectedConversationId, nextMessages => {
       const latestMessageTimestamp = nextMessages.reduce((latest, message) => Math.max(latest, Number(message.timestamp) || 0), 0);
+      latestMessageTimestampRef.current = latestMessageTimestamp;
       if (!initialLoad.current) {
         const incomingIds = nextMessages.slice(-1).map(message => message.id);
         if (incomingIds.length) {
@@ -84,16 +124,16 @@ export default function PrivateMessages() {
       setMessages(nextMessages);
       initialLoad.current = false;
       if (document.visibilityState === 'visible' && document.hasFocus()) {
-        markPrivateConversationRead(uid, selectedConversationId, latestMessageTimestamp || undefined).catch(() => {});
+        scheduleConversationRead(latestMessageTimestamp);
       }
     });
-  }, [selectedConversationId, uid]);
+  }, [selectedConversationId, uid, scheduleConversationRead]);
 
   useEffect(() => {
     if (!selectedConversationId || !uid) return undefined;
     const markReadOnRefocus = () => {
       if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
-      markPrivateConversationRead(uid, selectedConversationId).catch(() => {});
+      flushConversationRead();
     };
     window.addEventListener('focus', markReadOnRefocus);
     document.addEventListener('visibilitychange', markReadOnRefocus);
@@ -101,20 +141,19 @@ export default function PrivateMessages() {
       window.removeEventListener('focus', markReadOnRefocus);
       document.removeEventListener('visibilitychange', markReadOnRefocus);
     };
-  }, [selectedConversationId, uid]);
+  }, [selectedConversationId, uid, flushConversationRead]);
 
   useEffect(() => {
     if (!selectedConversationId || !uid) return undefined;
     const handleInteraction = event => {
       if (event.type === 'keydown' && event.isComposing) return;
       if (document.visibilityState !== 'visible') return;
-      const latestMessageTimestamp = messages.reduce((latest, message) => Math.max(latest, Number(message.timestamp) || 0), 0);
-      markPrivateConversationRead(uid, selectedConversationId, latestMessageTimestamp || undefined).catch(() => {});
+      scheduleConversationRead();
     };
     const interactionEvents = ['pointerdown', 'touchstart', 'keydown', 'click'];
     interactionEvents.forEach(eventName => document.addEventListener(eventName, handleInteraction, true));
     return () => interactionEvents.forEach(eventName => document.removeEventListener(eventName, handleInteraction, true));
-  }, [messages, selectedConversationId, uid]);
+  }, [selectedConversationId, uid, scheduleConversationRead]);
 
   useEffect(() => {
     const query = searchText.trim();
@@ -152,6 +191,9 @@ export default function PrivateMessages() {
       ? previous
       : [{ id: conversationId, members: { [uid]: true, [user.uid]: true }, participants: { [uid]: currentUser.profile || currentUser, [user.uid]: user } }, ...previous]);
     setSelectedConversationId(conversationId);
+    // Create the RTDB node before the messages subscription attaches so the
+    // rules allow the read immediately (see ensurePrivateConversation).
+    ensurePrivateConversation(conversationId, uid, user.uid, { [uid]: currentUser.profile || currentUser, [user.uid]: user }).catch(() => {});
     setSearchText('');
     setSearchResults([]);
   };
@@ -193,8 +235,6 @@ export default function PrivateMessages() {
     setSelectedConversationId(conversationId);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
   };
-
-  const recipientOnline = recipient?.uid ? Boolean(presence[recipient.uid]) : false;
 
   return (
     <div className={styles.chatLayout}>
@@ -240,7 +280,7 @@ export default function PrivateMessages() {
             </div>
             <div className={styles.userDetails}>
               <strong>{currentUser.profile?.displayName || 'User'}</strong>
-              <span>{currentUser.profile?.status || 'Online'}</span>
+              <span>{presence[uid]?.game?.name ? `Playing ${presence[uid].game.name}` : (currentUser.profile?.status || 'Online')}</span>
             </div>
           </Link>
         </div>
@@ -285,7 +325,7 @@ export default function PrivateMessages() {
             <div ref={messagesEndRef} />
           </div>
 
-          {sendError && <p style={{ padding: '0 1.25rem', color: '#f44336', fontSize: '0.85rem' }}>{sendError}</p>}
+          {sendError && <p style={{ padding: '0 1.25rem', color: 'var(--color-error)', fontSize: '0.85rem' }}>{sendError}</p>}
 
           <div className={styles.inputArea}>
             <form className={styles.inputContainer} onSubmit={handleSend}>
@@ -297,17 +337,6 @@ export default function PrivateMessages() {
           </div>
         </> : <div className={styles.emptyThread}><button className={styles.emptyMenuToggle} onClick={() => setIsSidebarOpen(true)} title="Open conversations" aria-label="Open conversations"><span className="material-symbols-outlined">menu</span></button><span className="material-symbols-outlined">forum</span><h2>Your private messages</h2><p>Search for a person to begin a conversation.</p></div>}
       </section>
-
-      {selectedConversationId && recipient?.uid && (
-        <aside className={styles.memberListSidebar}>
-          <p className="text-label-sm text-tertiary">MEMBER</p>
-          <button className={styles.memberItem}>
-            <UserAvatar user={recipient} size="2rem" />
-            <span>{recipient.displayName || 'User'}</span>
-            <span className={`${styles.statusDot} ${recipientOnline ? styles.online : styles.offline}`} />
-          </button>
-        </aside>
-      )}
     </div>
   );
 }

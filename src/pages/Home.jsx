@@ -10,24 +10,37 @@ export default function Home() {
   const [recentCommunities, setRecentCommunities] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Refresh when unread state changes (visiting a channel marks it read) or a
+  // new message arrives while this page is on screen.
   useEffect(() => {
     let cancelled = false;
-    const joinedIds = currentUser?.profile?.joinedCommunities || [];
-    if (!currentUser?.uid) return undefined;
-
-    Promise.all([
-      getUnreadCounts(currentUser.uid, joinedIds),
-      Promise.all(joinedIds.map(id => getCommunity(id)))
-    ]).then(([nextUnread, joinedCommunities]) => {
+    const refresh = () => {
       if (cancelled) return;
-      setUnreadData(nextUnread);
-      setRecentCommunities(joinedCommunities.filter(Boolean).sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0)).slice(0, 6));
-      setLoading(false);
-    }).catch(() => {
-      if (!cancelled) setLoading(false);
-    });
-
-    return () => { cancelled = true; };
+      const joinedIds = currentUser?.profile?.joinedCommunities || [];
+      if (!currentUser?.uid) return;
+      setLoading(true);
+      Promise.all([
+        getUnreadCounts(currentUser.uid, joinedIds),
+        Promise.all(joinedIds.map(id => getCommunity(id)))
+      ]).then(([nextUnread, joinedCommunities]) => {
+        if (cancelled) return;
+        setUnreadData(nextUnread);
+        setRecentCommunities(joinedCommunities.filter(Boolean).sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0)).slice(0, 6));
+        setLoading(false);
+      }).catch(() => { if (!cancelled) setLoading(false); });
+    };
+    refresh();
+    window.addEventListener('blink:unread-changed', refresh);
+    window.addEventListener('blink:message-received', refresh);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('blink:unread-changed', refresh);
+      window.removeEventListener('blink:message-received', refresh);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
   }, [currentUser?.uid, currentUser?.profile?.joinedCommunities]);
 
   const unreadCommunities = Object.entries(unreadData).filter(([, data]) => data.channels.length > 0);

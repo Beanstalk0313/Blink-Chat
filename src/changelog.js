@@ -1,10 +1,11 @@
 // Changelog loader. The human-editable source of truth is src/changelog.md
 // (see the header of that file for the format). This module parses it into
-// entries at build time via Vite's ?raw import, and exposes the same API the
-// native What's New screen has always used.
+// entries at build time via Vite's ?raw import for the What's New screen.
 import raw from './changelog.md?raw';
 
-const ENTRY_HEADER_RE = /^##\s*(\S+)\s*\|\s*(\S+)\s*\|\s*(.+?)\s*$/;
+// The version must start with a digit so the format example in the file's
+// header comment (## <version> | ...) is never parsed as a real entry.
+const ENTRY_HEADER_RE = /^##\s*(\d[\w.-]*)\s*\|\s*(\S+)\s*\|\s*(.+?)\s*$/;
 
 export const CHANGELOG = String(raw || '')
   .split(/\r?\n/)

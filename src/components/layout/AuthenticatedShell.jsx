@@ -1,18 +1,17 @@
 import { CallProvider } from '../../contexts/CallContext';
 import { NotificationProvider } from '../../contexts/NotificationContext';
-import { ThemeProvider } from '../../contexts/ThemeContext';
 import InstallPrompt from '../common/InstallPrompt';
 import AppLayout from './AppLayout';
 
+// The theme lives above the router (see App.jsx), so signed-out screens —
+// login, join, banned, errors — are painted by the chosen theme too.
 export default function AuthenticatedShell() {
   return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <CallProvider>
-          <AppLayout />
-          <InstallPrompt />
-        </CallProvider>
-      </NotificationProvider>
-    </ThemeProvider>
+    <NotificationProvider>
+      <CallProvider>
+        <AppLayout />
+        <InstallPrompt />
+      </CallProvider>
+    </NotificationProvider>
   );
 }

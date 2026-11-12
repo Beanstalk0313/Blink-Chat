@@ -194,7 +194,7 @@ Any RTDB rules change must be audited for:
 
 ## 6. Message ordering and caching invariants
 
-RTDB push IDs are the authoritative cross-device ordering key for messages. Message timestamps can collide or be affected by client clock differences. The existing merge path sorts messages by push ID in `mergeMessagesById`; do not reintroduce sorting solely by `timestamp`.
+Message order is decided by `compareMessages` (shared by `mergeMessagesById`, the `onChildChanged` re-sort, and PM subscriptions): the stored `timestamp` is the primary key and the push ID breaks ties (same-millisecond writes) and acts as the fallback when a timestamp is missing. This matters because the SDK generates push IDs from server-normalized time (`Date.now() + serverTimeOffset`), while the stored timestamp is the raw client clock — a stale `serverTimeOffset` at send time makes the two disagree, and sorting purely by push ID then places messages where their ID says instead of where their displayed time says. Do not revert to sorting by push ID alone; do not sort by timestamp alone either (same-ms collisions need the ID tie-break).
 
 Channel message caching is session-only:
 
@@ -377,4 +377,12 @@ Before handing off a change, verify the applicable items:
 - Mobile layout does not crop horizontally or hide content behind fixed navigation.
 - No secrets or private user data were added to source, logs, caches, or generated artifacts.
 - Any remaining platform limitation is stated in the final response.
+- User-visible changes got a new `## <version> | <date> | <title>` block at the top of `src/changelog.md` (newest block = app version).
+
+## 16. Versioning and changelog
+
+- `src/changelog.md` is the human-edited source of truth for “What's new”. Its blocks use `## <version> | <YYYY-MM-DD> | <Title>` followed by `- note` lines, newest first.
+- The newest block's version IS the app version: `src/version.js` derives `APP_VERSION` from `CHANGELOG[0].version` (falling back to `package.json` only when the changelog is empty). Keep `package.json`'s version in sync with the newest changelog block.
+- Publishing a new entry requires ONLY the changelog edit: the new version automatically becomes `APP_VERSION`, which is what triggers the What's New screen to open once per device (`checkAndMarkSeenVersion` in `src/version.js`). Do not add other version files.
+- What's New lives at `/whats-new` (sidebar bottom section) and renders the `CHANGELOG` exported from `src/changelog.js`.
 

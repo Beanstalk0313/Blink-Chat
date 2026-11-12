@@ -4,7 +4,7 @@
   padding: 2rem clamp(1rem, 4vw, 3rem);
   max-width: 46rem;
   margin: 0 auto;
-  color: var(--color-text, #e4e2e4);
+  color: var(--color-on-surface);
   overflow-y: auto;
 }
 
@@ -23,7 +23,7 @@
 
 .versionLabel {
   font-size: 0.8rem;
-  color: var(--color-text-tertiary, #8a8f98);
+  color: var(--color-tertiary);
   white-space: nowrap;
 }
 
@@ -33,15 +33,15 @@
   gap: 0.9rem;
   padding: 1rem 1.1rem;
   border-radius: 12px;
-  background: var(--color-surface, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
   margin-bottom: 1.5rem;
 }
 
 .intro p {
   margin: 0;
   font-size: 0.9rem;
-  color: var(--color-text-secondary, #b6bac2);
+  color: var(--color-on-surface-variant);
 }
 
 .logo {
@@ -53,14 +53,14 @@
 .entry {
   padding: 1.1rem 1.2rem;
   border-radius: 12px;
-  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
-  background: var(--color-surface, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
   margin-bottom: 1rem;
 }
 
 .entry.current {
-  border-color: var(--color-primary, #4b8eff);
-  box-shadow: 0 0 0 1px var(--color-primary, #4b8eff) inset;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 .entry h3 {
@@ -77,14 +77,14 @@
   letter-spacing: 0.08em;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: var(--color-primary, #4b8eff);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 .meta {
   margin: 0 0 0.6rem;
   font-size: 0.78rem;
-  color: var(--color-text-tertiary, #8a8f98);
+  color: var(--color-tertiary);
 }
 
 .entry ul {
@@ -97,11 +97,11 @@
 .entry li {
   font-size: 0.88rem;
   line-height: 1.45;
-  color: var(--color-text-secondary, #b6bac2);
+  color: var(--color-on-surface-variant);
 }
 
 .empty {
   text-align: center;
-  color: var(--color-text-tertiary, #8a8f98);
+  color: var(--color-tertiary);
   padding: 3rem 0;
 }

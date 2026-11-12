@@ -24,7 +24,7 @@ export default function InstallPrompt() {
   };
 
   return (
-    <div style={{ position: 'fixed', left: '1rem', right: '1rem', bottom: '5.5rem', zIndex: 2500, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', background: 'var(--color-surface-container-high)', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)', boxShadow: '0 12px 32px rgba(0,0,0,.35)' }}>
+    <div style={{ position: 'fixed', left: '1rem', right: '1rem', bottom: '5.5rem', zIndex: 2500, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem', background: 'var(--color-surface-container-high)', border: '1px solid var(--color-outline-variant)', borderRadius: 'var(--radius-sm)', boxShadow: '0 12px 32px var(--color-shadow)' }}>
       <span className="text-label-md">Install Blink for quicker access</span>
       <div style={{ display: 'flex', gap: '0.5rem' }}>
         <button type="button" onClick={() => setVisible(false)} style={{ padding: '0.5rem 0.75rem', background: 'transparent', color: 'var(--color-tertiary)', border: 0, cursor: 'pointer' }}>Dismiss</button>

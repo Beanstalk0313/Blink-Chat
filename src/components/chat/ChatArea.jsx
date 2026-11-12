@@ -28,6 +28,7 @@ import {
   votePoll,
   updateLastRead,
   setCommunityMuted,
+  compareMessages,
   leaveCommunity
 } from '../../services/db';
 import { uploadFile } from '../../services/upload';
@@ -37,6 +38,7 @@ import { useCall } from '../../contexts/CallContext';
 import UserAvatar from '../common/UserAvatar';
 import ProfilePopover from '../common/ProfilePopover';
 import Modal from '../common/Modal';
+import Dropdown from '../common/Dropdown';
 import CommunityBannedScreen from '../common/CommunityBannedScreen';
 import styles from './ChatArea.module.css';
 import { getMemberPermissions } from '../../services/permissions';
@@ -110,6 +112,12 @@ const channelsCache = new Map();
 
 const EMOJI_CHOICES = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '👀'];
 
+// Minimum spacing between read-marker writes for an open channel. Writes are
+// debounced to this window (the trailing write always happens) so a busy
+// channel does not hammer Firestore while still never losing a read. See
+// flushChannelRead/scheduleChannelRead below.
+const READ_MARK_THROTTLE_MS = 1200;
+
 function mergeMessagesById(...groups) {
   const byId = new Map();
   for (const group of groups) {
@@ -117,7 +125,7 @@ function mergeMessagesById(...groups) {
       if (message && message.id) byId.set(message.id, message);
     }
   }
-  return [...byId.values()].sort((first, second) => String(first.id).localeCompare(String(second.id)));
+  return [...byId.values()].sort(compareMessages);
 }
 
 function ChatAreaContent() {
@@ -146,6 +154,9 @@ function ChatAreaContent() {
   const [isNotifMenuOpen, setIsNotifMenuOpen] = useState(false);
   const [isPollOpen, setIsPollOpen] = useState(false);
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
+  const [gameModalOpen, setGameModalOpen] = useState(false);
+  const [gameModalStep, setGameModalStep] = useState('opponent');
+  const [gameOpponent, setGameOpponent] = useState(null);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [mentionQuery, setMentionQuery] = useState(null);
@@ -186,6 +197,7 @@ function ChatAreaContent() {
   const mountTime = useRef(null);
   const hasMarkedChannelRead = useRef(false);
   const liveReadThrottleRef = useRef(0);
+  const readMarkTimerRef = useRef(0);
   const hasRenderedMessages = useRef(false);
   const latestMessageTimestampRef = useRef(0);
   // Set while this client performs its own kick/ban cleanup, so the effect does
@@ -214,13 +226,38 @@ function ChatAreaContent() {
       .finally(() => navigate('/communities', { replace: true }));
   }, [kickedAt, currentUid, communityId, navigate]);
 
-  const markCurrentChannelRead = useCallback(() => {
-    if (!channelId || !currentUid || document.visibilityState !== 'visible') return;
-    const nowMs = Date.now();
-    if (nowMs - liveReadThrottleRef.current < 750) return;
-    liveReadThrottleRef.current = nowMs;
-    updateLastRead(currentUid, channelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+  // Writes the read marker immediately for the newest loaded message.
+  const flushChannelRead = useCallback(readThrough => {
+    if (!channelId || !currentUid) return;
+    if (readMarkTimerRef.current) {
+      window.clearTimeout(readMarkTimerRef.current);
+      readMarkTimerRef.current = 0;
+    }
+    liveReadThrottleRef.current = Date.now();
+    const timestamp = Number(readThrough) || latestMessageTimestampRef.current || undefined;
+    updateLastRead(currentUid, channelId, timestamp).catch(error => {
+      console.warn('Could not update the channel read marker:', error);
+    });
   }, [channelId, currentUid]);
+
+  // Debounced read marker: every call (re)schedules one trailing write with the
+  // newest loaded timestamp. This replaces the old throttled writes that were
+  // simply DROPPED inside the throttle window, which is why an open channel
+  // could still sit there showing an unread badge.
+  const scheduleChannelRead = useCallback(readThrough => {
+    if (!channelId || !currentUid || document.visibilityState !== 'visible') return;
+    const timestamp = Number(readThrough) || latestMessageTimestampRef.current || undefined;
+    const elapsed = Date.now() - liveReadThrottleRef.current;
+    if (readMarkTimerRef.current) window.clearTimeout(readMarkTimerRef.current);
+    readMarkTimerRef.current = window.setTimeout(
+      () => flushChannelRead(timestamp),
+      Math.max(0, READ_MARK_THROTTLE_MS - elapsed),
+    );
+  }, [channelId, currentUid, flushChannelRead]);
+
+  const markCurrentChannelRead = useCallback(() => {
+    scheduleChannelRead();
+  }, [scheduleChannelRead]);
   const permissions = getMemberPermissions(community, currentUser?.uid);
   const canManageChannels = permissions.includes('manage_channels');
   const canManageMessages = permissions.includes('manage_messages');
@@ -241,7 +278,13 @@ function ChatAreaContent() {
       return 0;
     }
   })();
-  const canSend = currentChannel?.type !== 'voice' && !isTimedOut && !currentChannel?.isLocked && slowModeRemaining <= 0 && (
+  // Channel messages live in RTDB, whose rules can only check "signed in", so
+  // without this gate a signed-in non-member could type into a channel and
+  // only the Firestore metadata write would be rejected. Fall back to
+  // "allowed" until the profile has loaded, so the composer never flickers.
+  const joinedCommunities = currentUser?.profile?.joinedCommunities;
+  const isCommunityMember = !Array.isArray(joinedCommunities) || joinedCommunities.includes(communityId);
+  const canSend = isCommunityMember && currentChannel?.type !== 'voice' && !isTimedOut && !currentChannel?.isLocked && slowModeRemaining <= 0 && (
     !currentChannel?.allowedRoles?.length || currentChannel.allowedRoles.some(allowedRole => roleIds.includes(allowedRole)) || canManageChannels
   );
 
@@ -316,6 +359,7 @@ function ChatAreaContent() {
     setMentionQuery(null);
     setReplyingTo(null);
     setReactionMenuFor(null);
+    setSelectedProfile(null);
     setIsNotifMenuOpen(false);
     setIsSearchOpen(false);
     setSearchQuery('');
@@ -327,9 +371,15 @@ function ChatAreaContent() {
     const cachedMessages = channelId ? getCachedMessages(channelId) : [];
     seenMessageIds.current = new Set(cachedMessages.map(message => message.id));
     hasMarkedChannelRead.current = false;
+    liveReadThrottleRef.current = 0;
     mountTime.current = Date.now();
     latestMessageTimestampRef.current = cachedMessages.reduce((latest, message) => Math.max(latest, Number(message.timestamp) || 0), 0);
-  }, [channelId]);
+    return () => {
+      // Leaving the channel is still "read up to here": flush this channel's
+      // pending debounced marker while this channel's timestamp is current.
+      flushChannelRead();
+    };
+  }, [channelId, flushChannelRead]);
 
   useEffect(() => {
     if (!channelId || !currentUser?.uid) return undefined;
@@ -382,7 +432,9 @@ function ChatAreaContent() {
         previousMessageCount.current = nextMessages.length;
         if (!hasMarkedChannelRead.current) {
           hasMarkedChannelRead.current = true;
-          updateLastRead(currentUser.uid, channelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+          // Opening a channel is a read: write the marker straight away (the
+          // channel is on screen, so waiting for focus only left it unread).
+          flushChannelRead();
         }
         initialLoad.current = false;
         return;
@@ -405,47 +457,44 @@ function ChatAreaContent() {
         }), 420);
       }
 
-      const newIncomingMessage = newlyArrived.find(message => message.authorUid !== currentUser.uid);
-
-      if (newIncomingMessage && !newIncomingMessage.system && !isMuted && !communityMuted) {
-        const isFresh = !newIncomingMessage.timestamp || newIncomingMessage.timestamp >= (mountTime.current - 5000);
-        if (isFresh) {
-          const displayName = currentUserDisplayName;
-          const mentionsCurrentUser = mentionsUser(newIncomingMessage.text, displayName);
-          const shouldNotify = notificationMode === 'all' || (notificationMode === 'mentions' && mentionsCurrentUser);
-          if (shouldNotify && document.visibilityState === 'visible' && document.hasFocus()) {
-            notify(`#${currentChannel?.name || 'chat'}`, newIncomingMessage.text || 'New attachment');
+      // Notify for the first message in this batch that actually warrants it.
+      // Only the first incoming message used to be examined, so a reply that
+      // arrived together with any other message was silently dropped.
+      if (!isMuted && !communityMuted && newlyArrived.length) {
+        const notifiable = newlyArrived.find(message => {
+          if (message.system || message.authorUid === currentUser.uid) return false;
+          if (notificationMode === 'all') return true;
+          if (notificationMode !== 'mentions') return false;
+          return mentionsUser(message.text, currentUserDisplayName) || message.replyTo?.authorUid === currentUser.uid;
+        });
+        if (notifiable) {
+          const isFresh = !notifiable.timestamp || notifiable.timestamp >= (mountTime.current - 5000);
+          if (isFresh && document.visibilityState === 'visible' && document.hasFocus()) {
+            notify(`#${currentChannel?.name || 'chat'}`, notifiable.text || 'New attachment');
           }
         }
       }
 
-      // While the channel is on screen, mark incoming messages as read so unread badges clear.
-      if (newIncomingMessage && document.visibilityState === 'visible' && document.hasFocus()) {
-        const nowMs = Date.now();
-        if (nowMs - liveReadThrottleRef.current >= 10000) {
-          liveReadThrottleRef.current = nowMs;
-          updateLastRead(currentUser.uid, channelId, latestMessageTimestampRef.current || undefined).catch(() => {});
-        }
-      }
+      // Anything now on screen and focused is read. Scheduled rather than
+      // gated, so the write always lands even while messages keep arriving;
+      // an unfocused window keeps its unread state (and its notification).
+      if (newlyArrived.length && document.visibilityState === 'visible' && document.hasFocus()) scheduleChannelRead();
 
       setMessages(nextMessages);
       setPinnedMessages(nextMessages.filter(message => message?.isPinned));
       previousMessageCount.current = nextMessages.length;
       if (!hasMarkedChannelRead.current) {
         hasMarkedChannelRead.current = true;
-        updateLastRead(currentUser.uid, channelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+        flushChannelRead();
       }
     }, messageLimit);
-  }, [channelId, currentUser?.uid, currentUserDisplayName, currentChannel?.name, communityMuted, isMuted, messageLimit, notificationMode, notify]);
+  }, [channelId, currentUser?.uid, currentUserDisplayName, currentChannel?.name, communityMuted, isMuted, messageLimit, notificationMode, notify, flushChannelRead, scheduleChannelRead]);
 
   useEffect(() => {
     if (!channelId || !currentUser?.uid) return undefined;
     const markReadOnRefocus = () => {
       if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
-      const nowMs = Date.now();
-      if (nowMs - liveReadThrottleRef.current < 10000) return;
-      liveReadThrottleRef.current = nowMs;
-      updateLastRead(currentUser.uid, channelId, latestMessageTimestampRef.current || undefined).catch(() => {});
+      flushChannelRead();
     };
     window.addEventListener('focus', markReadOnRefocus);
     document.addEventListener('visibilitychange', markReadOnRefocus);
@@ -453,7 +502,7 @@ function ChatAreaContent() {
       window.removeEventListener('focus', markReadOnRefocus);
       document.removeEventListener('visibilitychange', markReadOnRefocus);
     };
-  }, [channelId, currentUser?.uid]);
+  }, [channelId, currentUser?.uid, flushChannelRead]);
 
   useEffect(() => {
     if (!channelId || !currentUser?.uid) return undefined;
@@ -522,6 +571,11 @@ function ChatAreaContent() {
     setSendError('');
     try {
       await sendMessage(channelId, text, currentUser.uid, attachmentValue || undefined, options);
+      // Sending means you are looking at the channel, so move its read marker
+      // with the message. Without this the message you just wrote counts as
+      // unread on the next surface (or on another device) because the marker
+      // only advances on window focus and message events.
+      flushChannelRead(Date.now());
       if (typingActiveRef.current) {
         typingActiveRef.current = false;
         clearTyping(channelId, currentUser.uid).catch(() => {});
@@ -671,13 +725,15 @@ function ChatAreaContent() {
   const startGame = () => {
     const opponents = activeMembers.filter(member => member.uid !== currentUid);
     if (!opponents.length) { setSendError('Invite another member before starting a two-player game.'); return; }
-    const opponentList = opponents.slice(0, 12).map((member, index) => `${index + 1}. ${member.displayName}`).join('\n');
-    const opponentChoice = Number(window.prompt(`Choose an opponent:\n${opponentList}`, '1')) - 1;
-    const opponent = opponents[opponentChoice];
-    if (!opponent) return;
-    const choice = window.prompt('Choose a game: ticTacToe, connectFour, checkers, or chess', 'ticTacToe');
-    const type = String(choice || '').trim();
-    if (['ticTacToe', 'connectFour', 'checkers', 'chess'].includes(type)) performSend('', null, { game: { type, opponentUid: opponent.uid, opponentName: opponent.displayName || 'Member' } });
+    setGameOpponent(null);
+    setGameModalStep('opponent');
+    setGameModalOpen(true);
+  };
+
+  const chooseGame = type => {
+    if (!gameOpponent) return;
+    performSend('', null, { game: { type, opponentUid: gameOpponent.uid, opponentName: gameOpponent.displayName || 'Member', authorName: currentUser?.profile?.displayName || 'Someone' } });
+    setGameModalOpen(false);
   };
 
   const handleFileUpload = async event => {
@@ -720,7 +776,7 @@ function ChatAreaContent() {
     event.dataTransfer.setData('text/plain', channelId);
     const ghost = document.createElement('div');
     ghost.textContent = channels.find(channel => channel.id === channelId)?.name || 'Channel';
-    ghost.style.cssText = 'position:fixed;top:-1000px;left:-1000px;padding:8px 14px;border-radius:8px;background:#2a2a2c;color:#e4e2e4;font:600 13px Manrope,sans-serif;border:1px solid #414755;';
+    ghost.style.cssText = 'position:fixed;top:-1000px;left:-1000px;padding:8px 14px;border-radius:8px;background:var(--color-surface-container-high);color:var(--color-on-surface);font:600 13px Manrope,sans-serif;border:1px solid var(--color-outline-variant);';
     document.body.appendChild(ghost);
     dragGhostRef.current = ghost;
     event.dataTransfer.setDragImage(ghost, 14, 14);
@@ -973,10 +1029,10 @@ function ChatAreaContent() {
               const myVote = poll ? poll.options.find(option => option.id && poll.votes?.[option.id]?.[currentUid])?.id || null : null;
               const pollTotal = poll ? [...new Set(poll.options.flatMap(option => Object.keys(poll.votes?.[option.id] || {})))].length : 0;
               return <article key={message.id} id={`blink-msg-${message.id}`} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received} ${isMe && animatedMessageIds.has(message.id) ? styles.justSent : ''} ${highlightedMessageId === message.id ? styles.jumpHighlight : ''}`} onDoubleClick={() => { if (currentUid && !message.system) toggleReaction(channelId, message.id, '👍', currentUid, message.reactions?.['👍']?.[currentUid] === true).catch(() => {}); }}>
-                <button className={styles.messageAvatar} data-profile-trigger onClick={() => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author })} title={`Open ${author.displayName} profile`}><UserAvatar user={author} size="2.5rem" /></button>
-                {selectedProfile?.messageId === message.id && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} onClose={() => setSelectedProfile(null)} />}
+                <button className={styles.messageAvatar} data-profile-trigger onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })} title={`Open ${author.displayName} profile`}><UserAvatar user={author} size="2.5rem" /></button>
+                {selectedProfile?.messageId === message.id && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}
                 <div className={styles.messageContent}>
-                  <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined} onClick={() => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author })}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</button><time>{formatMessageTime(message.timestamp)}</time><div className={styles.messageActions}>
+                  <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined} onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</button><time>{formatMessageTime(message.timestamp)}</time><div className={styles.messageActions}>
                     <button className={styles.msgActionBtn} onClick={() => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })} title="Reply"><span className="material-symbols-outlined">reply</span></button>
                     <button className={styles.msgActionBtn} onClick={() => setReactionMenuFor(reactionMenuFor === message.id ? null : message.id)} title="Add reaction"><span className="material-symbols-outlined">add_reaction</span></button>
                     {isMe && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}
@@ -1013,16 +1069,37 @@ function ChatAreaContent() {
             {typingLabel && <div className={styles.typingIndicator}><span className={styles.typingDots}><i /><i /><i /></span><span>{typingLabel}</span></div>}
             {replyingTo && <div className={styles.replyBar}><span className="material-symbols-outlined">reply</span><span className={styles.replyBarBody}><strong>Replying to {replyingTo.authorName}</strong><span>{replyingTo.text || 'Attachment'}</span></span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setReplyingTo(null)} title="Cancel reply"><span className="material-symbols-outlined">close</span></button></div>}
             {pendingAttachment && <div className={styles.pendingAttachment}><span className="material-symbols-outlined">description</span><span>{pendingAttachment.name}</span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setPendingAttachment(null)} title="Remove attachment"><span className="material-symbols-outlined">close</span></button></div>}
-            <form className={styles.inputContainer} onSubmit={handleSendMessage}><div className={styles.composerActionMenu}>{isComposerMenuOpen && <div className={styles.composerFlyout}><label className={styles.composerFlyoutItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach File<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFileUpload(event); }} disabled={isUploading || !canSend} /></label><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsPollOpen(true); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); startGame(); }}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}<button type="button" className={styles.inputAction} onClick={() => setIsComposerMenuOpen(open => !open)} title="More composer actions" disabled={!canSend}><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button></div><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend || isUploading} placeholder={slowModeRemaining > 0 ? `Slow mode: ${Math.ceil(slowModeRemaining / 1000)}s left` : canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => handleComposerChange(event.target.value)} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form>
+            <form className={styles.inputContainer} onSubmit={handleSendMessage}><div className={styles.composerActionMenu}>{isComposerMenuOpen && <div className={styles.composerFlyout}><label className={styles.composerFlyoutItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach File<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFileUpload(event); }} disabled={isUploading || !canSend} /></label><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsPollOpen(true); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); startGame(); }}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}<button type="button" className={styles.inputAction} onClick={() => setIsComposerMenuOpen(open => !open)} title="More composer actions" disabled={!canSend}><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button></div><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend || isUploading} placeholder={slowModeRemaining > 0 ? `Slow mode: ${Math.ceil(slowModeRemaining / 1000)}s left` : canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : !isCommunityMember ? 'Join this community to send messages' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => handleComposerChange(event.target.value)} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form>
           </div>
         </>}
       </section>
 
-      {isMemberListOpen && <aside className={styles.memberListSidebar}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={() => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member }); }}><UserAvatar user={member} size="2rem" /><span>{member.displayName}</span><span className={`${styles.statusDot} ${presence[member.uid] ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
+      {isMemberListOpen && <aside className={styles.memberListSidebar}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={event => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member, anchor: event.currentTarget }); }}><UserAvatar user={member} size="2rem" /><span>{member.displayName}</span><span className={`${styles.statusDot} ${presence[member.uid] ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
+
+      <Modal isOpen={gameModalOpen} onClose={() => setGameModalOpen(false)} title={gameModalStep === 'opponent' ? 'Choose an opponent' : `Choose a game vs ${gameOpponent?.displayName || '…'}`}>
+        {gameModalStep === 'opponent' ? (
+          <div className={styles.gameChoiceGrid}>
+            {activeMembers.filter(member => member.uid !== currentUid).slice(0, 24).map(member => (
+              <button type="button" key={member.uid} className={styles.gameChoiceBtn} onClick={() => { setGameOpponent(member); setGameModalStep('game'); }}>
+                <UserAvatar user={member} size="2rem" />
+                <span>{member.displayName}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className={styles.gameChoiceGrid}>
+            <button type="button" className={styles.gameChoiceBtn} onClick={() => chooseGame('ticTacToe')}><span className="material-symbols-outlined">grid_on</span><span>Tic-Tac-Toe</span></button>
+            <button type="button" className={styles.gameChoiceBtn} onClick={() => chooseGame('connectFour')}><span className="material-symbols-outlined">view_column</span><span>Connect Four</span></button>
+            <button type="button" className={styles.gameChoiceBtn} onClick={() => chooseGame('checkers')}><span className="material-symbols-outlined">checkerboard</span><span>Checkers</span></button>
+            <button type="button" className={styles.gameChoiceBtn} onClick={() => chooseGame('chess')}><span className="material-symbols-outlined">chess</span><span>Chess</span></button>
+            <button type="button" className={styles.gameChoiceBtn} onClick={() => setGameModalStep('opponent')}><span className="material-symbols-outlined">arrow_back</span><span>Back</span></button>
+          </div>
+        )}
+      </Modal>
 
       <Modal isOpen={isPollOpen} onClose={() => setIsPollOpen(false)} title="Create poll" footer={<><button className={styles.modalCancel} onClick={() => setIsPollOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreatePoll} disabled={!pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2}>Create poll</button></>}><div className={styles.modalInputGroup}><label>QUESTION</label><input className={styles.modalInput} value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} placeholder="What do you want to know?" autoFocus /><label>OPTIONS (2–6)</label>{pollOptions.map((option, index) => <div className={styles.pollOptionRow} key={index}><input className={styles.modalInput} value={option} onChange={event => setPollOptions(previous => previous.map((value, optionIndex) => optionIndex === index ? event.target.value : value))} placeholder={`Option ${index + 1}`} />{pollOptions.length > 2 && <button type="button" className={styles.removeAttachmentBtn} onClick={() => setPollOptions(previous => previous.filter((_, optionIndex) => optionIndex !== index))} title="Remove option"><span className="material-symbols-outlined">close</span></button>}</div>)}{pollOptions.length < 6 && <button type="button" className={styles.modalCancel} onClick={() => setPollOptions(previous => [...previous, ''])}>Add option</button>}</div></Modal>
-      <Modal isOpen={isCreateChannelOpen} onClose={() => setIsCreateChannelOpen(false)} title="Create channel" footer={<><button className={styles.modalCancel} onClick={() => setIsCreateChannelOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreateChannel}>Create</button></>}><div className={styles.modalInputGroup}><label>CHANNEL NAME</label><input className={styles.modalInput} value={newChannelName} onChange={event => setNewChannelName(event.target.value)} autoFocus /><label>CHANNEL TYPE</label><select className={styles.modalInput} value={newChannelType} onChange={event => setNewChannelType(event.target.value)}><option value="text">Text</option><option value="voice">Voice</option></select></div></Modal>
-      <Modal isOpen={isPinnedMessagesOpen} onClose={() => setIsPinnedMessagesOpen(false)} title="Pinned messages" footer={<button className={styles.modalConfirm} onClick={() => setIsPinnedMessagesOpen(false)}>Close</button>}><div className={styles.pinnedList}>{pinnedMessages.length ? pinnedMessages.map(message => <div className={styles.pinnedMsgItem} key={message.id}><strong>{authorFor(message).displayName}</strong><p>{message.text || 'Attachment'}</p></div>) : <p className="text-tertiary">No pinned messages in this channel.</p>}</div></Modal>
+      <Modal isOpen={isCreateChannelOpen} onClose={() => setIsCreateChannelOpen(false)} title="Create channel" footer={<><button className={styles.modalCancel} onClick={() => setIsCreateChannelOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreateChannel}>Create</button></>}><div className={styles.modalInputGroup}><label>CHANNEL NAME</label><input className={styles.modalInput} value={newChannelName} onChange={event => setNewChannelName(event.target.value)} autoFocus /><label>CHANNEL TYPE</label><Dropdown value={newChannelType} onChange={setNewChannelType} options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]} /></div></Modal>
+      <Modal isOpen={isPinnedMessagesOpen} onClose={() => setIsPinnedMessagesOpen(false)} title="Pinned messages" footer={<button className={styles.modalConfirm} onClick={() => setIsPinnedMessagesOpen(false)}>Close</button>}><div className={styles.pinnedList}>{pinnedMessages.length ? pinnedMessages.map(message => { const pinnedAuthor = authorFor(message); const pinnedRole = primaryRoleForMember(community, message.authorUid); return <div className={styles.pinnedMsgItem} key={message.id}><strong style={pinnedRole?.color ? { color: pinnedRole.color } : undefined}><RoleBadge role={pinnedRole} />{pinnedAuthor.displayName}</strong><div className={styles.pinnedMsgText}>{message.text ? renderMessageText(message.text, message.id) : <span className="text-tertiary">Attachment</span>}</div></div>; }) : <p className="text-tertiary">No pinned messages in this channel.</p>}</div></Modal>
     </div>
   );
 }

@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { updateUserProfile } from '../services/db';
+import { FRIEND_REQUEST_PRIVACY_OPTIONS, MESSAGE_PRIVACY_OPTIONS, friendRequestPrivacyOf, messagePrivacyOf, setFriendRequestPrivacy as saveFriendRequestPrivacy, setMessagePrivacy as saveMessagePrivacy } from '../services/friends';
 import Modal from '../components/common/Modal';
+import Dropdown from '../components/common/Dropdown';
 import styles from './Settings.module.css';
 import ThemeSelect from '../components/common/ThemeSelect';
 import { useTheme } from '../contexts/ThemeContext';
@@ -12,7 +14,7 @@ import { APP_VERSION } from '../version';
 export default function Settings() {
   const { currentUser, logout, updateEmail, updatePassword, resetPassword } = useAuth();
   const { settings: notifySettings, setSettings: setNotifySettings, notificationPermission, requestNotificationPermission } = useNotifications();
-  const { globalTheme, setTheme } = useTheme();
+  const { globalTheme, setTheme, reducedMotion, setReducedMotion, highContrast, setHighContrast } = useTheme();
   const [activeTab, setActiveTab] = useState('account');
   
   // Account States
@@ -26,24 +28,33 @@ export default function Settings() {
   
   // Privacy States
   const [isPrivate, setIsPrivate] = useState(currentUser?.profile?.isPrivateProfile || false);
-  const [blockPMs, setBlockPMs] = useState(currentUser?.profile?.blockPrivateMessages || false);
+  const [friendRequestPrivacy, setFriendRequestPrivacy] = useState(friendRequestPrivacyOf(currentUser?.profile));
+  const [messagePrivacy, setMessagePrivacy] = useState(messagePrivacyOf(currentUser?.profile));
+  const [gameActivity, setGameActivity] = useState(currentUser?.profile?.gameActivity !== false);
   const [status, setStatus] = useState(currentUser?.profile?.status || 'Online');
   
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // Sync form fields only when the signed-in user changes, using render-time
-  // adjustment (an effect here would clobber unsaved form edits on every
-  // profile snapshot with stale values while the user was typing).
-  const [syncedUid, setSyncedUid] = useState(currentUser?.uid);
-  if (syncedUid !== currentUser?.uid) {
-    setSyncedUid(currentUser?.uid);
+  // Sync form fields when the account changes, and once more when its profile
+  // first arrives, using render-time adjustment (an effect here would clobber
+  // unsaved form edits on every profile snapshot with stale values while the
+  // user was typing). Keying on "uid:profile-loaded" matters because the
+  // profile document loads a moment after sign-in: keying on uid alone synced
+  // the defaults first, then refused to sync again, so saved settings (privacy
+  // levels, status, private profile) showed up as default on every visit.
+  const [syncedKey, setSyncedKey] = useState(null);
+  const profileSyncKey = `${currentUser?.uid || ''}:${currentUser?.profileLoaded ? 'loaded' : 'pending'}`;
+  if (syncedKey !== profileSyncKey) {
+    setSyncedKey(profileSyncKey);
     const profile = currentUser?.profile || {};
     setNewEmail(currentUser?.email || profile.email || '');
     setDisplayName(profile.displayName || currentUser?.displayName || '');
     setAboutMe(profile.aboutMe || '');
     setIsPrivate(Boolean(profile.isPrivateProfile));
-    setBlockPMs(Boolean(profile.blockPrivateMessages));
+    setFriendRequestPrivacy(friendRequestPrivacyOf(profile));
+    setMessagePrivacy(messagePrivacyOf(profile));
+    setGameActivity(profile.gameActivity !== false);
     setStatus(profile.status || 'Online');
   }
 
@@ -92,12 +103,30 @@ export default function Settings() {
     }
   };
 
-  const handleBlockPMsToggle = async (val) => {
-    setBlockPMs(val);
+  const handleFriendRequestPrivacy = async (val) => {
+    setFriendRequestPrivacy(val);
     try {
-      await updateUserProfile(currentUser.uid, { blockPrivateMessages: val });
+      await saveFriendRequestPrivacy(currentUser.uid, val);
     } catch {
       setMessage({ type: 'error', text: 'Failed to update privacy settings' });
+    }
+  };
+
+  const handleMessagePrivacy = async (val) => {
+    setMessagePrivacy(val);
+    try {
+      await saveMessagePrivacy(currentUser.uid, val);
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update privacy settings' });
+    }
+  };
+
+  const handleGameActivityToggle = async (val) => {
+    setGameActivity(val);
+    try {
+      await updateUserProfile(currentUser.uid, { gameActivity: val });
+    } catch {
+      setMessage({ type: 'error', text: 'Failed to update game activity' });
     }
   };
 
@@ -251,12 +280,7 @@ export default function Settings() {
                 </div>
                 <div className={styles.inputGroup}>
                   <label className="text-label-md">STATUS</label>
-                  <select value={status} onChange={e => setStatus(e.target.value)} className={styles.input}>
-                    <option>Online</option>
-                    <option>Away</option>
-                    <option>Do Not Disturb</option>
-                    <option>Invisible</option>
-                  </select>
+                  <Dropdown value={status} onChange={setStatus} options={[{ value: 'Online', label: 'Online' }, { value: 'Away', label: 'Away' }, { value: 'Do Not Disturb', label: 'Do Not Disturb' }, { value: 'Invisible', label: 'Invisible' }]} />
                 </div>
                 <button type="submit" className={styles.submitBtn} disabled={loading}>
                   {loading ? 'Saving...' : 'Update Profile'}
@@ -337,11 +361,35 @@ export default function Settings() {
               </div>
               <div className={styles.settingCard}>
                 <div className={styles.settingInfo}>
-                  <span className="text-label-md">BLOCK PRIVATE MESSAGES</span>
-                  <p className="text-body-md text-tertiary">When enabled, other users cannot send you direct messages.</p>
+                  <span className="text-label-md">WHO CAN SEND YOU FRIEND REQUESTS</span>
+                  <p className="text-body-md text-tertiary">Friends of friends means someone who already shares a mutual friend with you.</p>
+                </div>
+                <Dropdown
+                  value={friendRequestPrivacy}
+                  onChange={handleFriendRequestPrivacy}
+                  options={FRIEND_REQUEST_PRIVACY_OPTIONS}
+                  ariaLabel="Who can send you friend requests"
+                />
+              </div>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">WHO CAN SEND YOU PRIVATE MESSAGES</span>
+                  <p className="text-body-md text-tertiary">Applies to new direct messages. People you already talk to keep their conversation.</p>
+                </div>
+                <Dropdown
+                  value={messagePrivacy}
+                  onChange={handleMessagePrivacy}
+                  options={MESSAGE_PRIVACY_OPTIONS}
+                  ariaLabel="Who can send you private messages"
+                />
+              </div>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">SHOW GAME ACTIVITY</span>
+                  <p className="text-body-md text-tertiary">Desktop app only: shows the game you are playing on your profile and to your friends. Blink never sees games you have not told it to look for.</p>
                 </div>
                 <label className={styles.switch}>
-                  <input type="checkbox" checked={blockPMs} onChange={(e) => handleBlockPMsToggle(e.target.checked)} />
+                  <input type="checkbox" checked={gameActivity} onChange={(e) => handleGameActivityToggle(e.target.checked)} />
                   <span className={styles.slider}></span>
                 </label>
               </div>
@@ -359,9 +407,25 @@ export default function Settings() {
                 </div>
                 <ThemeSelect value={globalTheme} onChange={setTheme} label="" />
               </div>
-              <div className={styles.comingSoon}>
-                <span className="material-symbols-outlined">accessibility_new</span>
-                <p>Reduced motion and contrast controls are ready for the next release.</p>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">REDUCED MOTION</span>
+                  <p className="text-body-md text-tertiary">Turns off animations and transitions across Blink.</p>
+                </div>
+                <label className={styles.switch}>
+                  <input type="checkbox" checked={reducedMotion} onChange={(e) => setReducedMotion(e.target.checked)} />
+                  <span className={styles.slider}></span>
+                </label>
+              </div>
+              <div className={styles.settingCard}>
+                <div className={styles.settingInfo}>
+                  <span className="text-label-md">HIGH CONTRAST</span>
+                  <p className="text-body-md text-tertiary">Stronger text, borders and surface separation for readability.</p>
+                </div>
+                <label className={styles.switch}>
+                  <input type="checkbox" checked={highContrast} onChange={(e) => setHighContrast(e.target.checked)} />
+                  <span className={styles.slider}></span>
+                </label>
               </div>
             </div>
           )}

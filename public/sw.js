@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blink-shell-v7';
+const CACHE_NAME = 'blink-shell-v8';
 const APP_SHELL = ['/', '/index.html', '/logo.svg', '/favicon.svg'];
 
 self.addEventListener('message', event => {

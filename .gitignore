@@ -1,7 +1,6 @@
 # Dependencies
 node_modules/
 dist/
-dist-native/
 
 # Environment variables
 .env
@@ -30,6 +29,10 @@ Thumbs.db
 .claude/
 .firebase/
 .github/
+# Tauri build output (icons/ are generated once and kept)
+src-tauri/target/
+src-tauri/gen/
+
 .qwen/
 .trae/
 .vibe/

@@ -4,7 +4,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(14, 14, 16, 0.8);
+  background-color: var(--color-scrim-strong);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -14,14 +14,14 @@
 }
 
 .modal {
-  background-color: rgba(31, 31, 33, 0.9);
+  background-color: var(--color-surface-container-high);
   backdrop-filter: blur(24px) saturate(200%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 500px;
   padding: 2rem;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 25px 50px -12px var(--color-shadow-strong);
   color: var(--color-on-background);
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -52,7 +52,7 @@
 }
 
 .closeBtn:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--tint-active);
   color: var(--color-on-surface);
 }
 
@@ -74,8 +74,8 @@
 
 .input {
   width: 100%;
-  background-color: rgba(14, 14, 16, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--color-surface-container-low);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-DEFAULT);
   padding: 0.75rem 1rem;
   color: var(--color-on-surface);
@@ -86,7 +86,7 @@
 .input:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(173, 198, 255, 0.2);
+  box-shadow: 0 0 0 2px var(--color-primary-medium);
 }
 
 .checkboxGroup {
@@ -107,7 +107,7 @@
   padding: 1rem;
   border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--color-primary-container), var(--color-inverse-primary));
-  color: white;
+  color: var(--color-on-primary);
   font: var(--font-label-md);
   border: none;
   cursor: pointer;
@@ -117,7 +117,7 @@
 
 .submitBtn:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(75, 142, 255, 0.4);
+  box-shadow: 0 6px 20px var(--color-primary-strong);
 }
 
 .submitBtn:disabled {

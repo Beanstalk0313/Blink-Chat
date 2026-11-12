@@ -19,6 +19,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { compressAndConvert } from '../services/utils';
 import UserAvatar from '../components/common/UserAvatar';
 import Modal from '../components/common/Modal';
+import Dropdown from '../components/common/Dropdown';
 import styles from './CommunitySettings.module.css';
 import ThemeSelect from '../components/common/ThemeSelect';
 import { useTheme } from '../contexts/ThemeContext';
@@ -319,7 +320,7 @@ export default function CommunitySettings() {
     event.dataTransfer.setData('text/plain', channelId);
     const ghost = document.createElement('div');
     ghost.textContent = channels.find(channel => channel.id === channelId)?.name || 'Channel';
-    ghost.style.cssText = 'position:fixed;top:-1000px;left:-1000px;padding:8px 14px;border-radius:8px;background:#2a2a2c;color:#e4e2e4;font:600 13px Manrope,sans-serif;border:1px solid #414755;';
+    ghost.style.cssText = 'position:fixed;top:-1000px;left:-1000px;padding:8px 14px;border-radius:8px;background:var(--color-surface-container-high);color:var(--color-on-surface);font:600 13px Manrope,sans-serif;border:1px solid var(--color-outline-variant);';
     document.body.appendChild(ghost);
     dragGhostRef.current = ghost;
     event.dataTransfer.setDragImage(ghost, 14, 14);
@@ -584,10 +585,7 @@ export default function CommunitySettings() {
                     <label className={styles.policyToggle}><input type="checkbox" checked={systemJoinEnabled} onChange={e => setSystemJoinEnabled(e.target.checked)} /> Show when members join</label>
                     <label className={styles.policyToggle}><input type="checkbox" checked={systemLeaveEnabled} onChange={e => setSystemLeaveEnabled(e.target.checked)} /> Show when members leave</label>
                     <label className="text-label-sm" style={{ marginTop: '0.5rem' }}>CHANNEL FOR SYSTEM MESSAGES</label>
-                    <select className={styles.modalInput} value={systemChannelId} onChange={e => setSystemChannelId(e.target.value)}>
-                      <option value="">None</option>
-                      {channels.filter(channel => channel.type !== 'voice').map(channel => <option key={channel.id} value={channel.id}>#{channel.name}</option>)}
-                    </select>
+                    <Dropdown value={systemChannelId} onChange={setSystemChannelId} options={[{ value: '', label: 'None' }, ...channels.filter(channel => channel.type !== 'voice').map(channel => ({ value: channel.id, label: `#${channel.name}` }))]} />
                     <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>Joined/left activity is posted to this channel when enabled.</p>
                   </div>
                 </>
@@ -643,17 +641,12 @@ export default function CommunitySettings() {
                 value={newChannelName}
                 onChange={e => setNewChannelName(e.target.value)}
               />
-              <select value={newChannelType} onChange={e => setNewChannelType(e.target.value)}>
-                <option value="text">Text</option>
-                <option value="voice">Voice</option>
-              </select>
+              <Dropdown value={newChannelType} onChange={setNewChannelType} options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]} />
               <label className={styles.policyToggle}>
                 <input type="checkbox" checked={newChannelLocked} onChange={e => setNewChannelLocked(e.target.checked)} />
                 Locked
               </label>
-              <select className={styles.slowModeSelect} value={newChannelSlowMode} onChange={e => setNewChannelSlowMode(Number(e.target.value))} title="Slow mode">
-                {SLOW_MODE_OPTIONS.map(option => <option key={option.seconds} value={option.seconds}>Slow mode: {option.label}</option>)}
-              </select>
+              <Dropdown value={newChannelSlowMode} onChange={value => setNewChannelSlowMode(Number(value))} options={SLOW_MODE_OPTIONS.map(option => ({ value: option.seconds, label: `Slow mode: ${option.label}` }))} />
               <div className={styles.channelRolePicker} aria-label="Allowed roles for new channel">
                       <span className={styles.pickerLabel}>ACCESS</span>
                       <div className={styles.roleCheckboxes}>
@@ -694,9 +687,7 @@ export default function CommunitySettings() {
                       <input type="checkbox" checked={Boolean(chan.isLocked)} onChange={e => handleChannelPolicyChange(chan, { isLocked: e.target.checked })} />
                       Locked
                     </label>
-                    <select className={styles.slowModeSelect} value={Number(chan.slowModeSeconds) || 0} onChange={e => handleChannelPolicyChange(chan, { slowModeSeconds: Number(e.target.value) })} title="Slow mode">
-                      {SLOW_MODE_OPTIONS.map(option => <option key={option.seconds} value={option.seconds}>{option.label}</option>)}
-                    </select>
+                    <Dropdown value={Number(chan.slowModeSeconds) || 0} onChange={value => handleChannelPolicyChange(chan, { slowModeSeconds: Number(value) })} options={SLOW_MODE_OPTIONS.map(option => ({ value: option.seconds, label: option.label }))} />
                     <div className={styles.channelRolePicker} aria-label={`Allowed roles for ${chan.name}`}>
                       <span className={styles.pickerLabel}>ACCESS</span>
                       <div className={styles.roleCheckboxes}>
@@ -739,7 +730,7 @@ export default function CommunitySettings() {
               <div className={styles.formHeading}><svg className={styles.formHeadingIcon} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg><div><strong>Create a role</strong><span>Use a clear name members will recognize.</span></div></div>
               <div className={styles.roleFormGrid}>
                 <label className={styles.fieldGroup}><span>ROLE NAME</span><input value={newRoleName} onChange={event => setNewRoleName(event.target.value)} placeholder="e.g. Event Host" maxLength={32} /></label>
-                <label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={newRoleColor} onChange={event => setNewRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><select value={newRoleBadge} onChange={event => setNewRoleBadge(event.target.value)}>{ROLE_BADGE_PRESETS.map(badge => <option key={badge} value={badge}>{badge}</option>)}</select></label>
+                <label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={newRoleColor} onChange={event => setNewRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><Dropdown value={newRoleBadge} onChange={setNewRoleBadge} options={ROLE_BADGE_PRESETS.map(badge => ({ value: badge, label: badge }))} /></label>
               </div>
               <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={newRolePermissions.includes(permission.id)} onChange={event => setNewRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
               <button type="submit" className={styles.primaryAction} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'add'}</span>{adminSaving ? 'Creating...' : 'Create role'}</button>
@@ -757,7 +748,7 @@ export default function CommunitySettings() {
                   </div>
                   {editingRoleId === roleId ? (
                     <div className={styles.roleEditor}>
-                      <div className={styles.roleFormGrid}><label className={styles.fieldGroup}><span>ROLE NAME</span><input value={editRoleName} onChange={event => setEditRoleName(event.target.value)} /></label><label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={editRoleColor} onChange={event => setEditRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><select value={editRoleBadge} onChange={event => setEditRoleBadge(event.target.value)}>{ROLE_BADGE_PRESETS.map(badge => <option key={badge} value={badge}>{badge}</option>)}</select></label></div>
+                      <div className={styles.roleFormGrid}><label className={styles.fieldGroup}><span>ROLE NAME</span><input value={editRoleName} onChange={event => setEditRoleName(event.target.value)} /></label><label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={editRoleColor} onChange={event => setEditRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><Dropdown value={editRoleBadge} onChange={setEditRoleBadge} options={ROLE_BADGE_PRESETS.map(badge => ({ value: badge, label: badge }))} /></label></div>
                       <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={editRolePermissions.includes(permission.id)} onChange={event => setEditRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
                       <div className={styles.editorActions}><button type="button" className={styles.secondaryAction} onClick={() => setEditingRoleId(null)}>Cancel</button><button type="button" className={styles.primaryAction} onClick={() => handleSaveRole(roleId)} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'save'}</span>{adminSaving ? 'Saving...' : 'Save role'}</button></div>
                     </div>
@@ -863,23 +854,7 @@ export default function CommunitySettings() {
           <p className="text-body-md">Are you sure you want to ban this member? They will lose access to this community.</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <label className="text-label-sm">BAN DURATION</label>
-            <select 
-              value={banDuration} 
-              onChange={(e) => setBanDuration(e.target.value)}
-              style={{
-                padding: '0.75rem',
-                background: 'rgba(255,255,255,0.05)',
-                color: 'white',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 'var(--radius-md)'
-              }}
-            >
-              <option value="-1">Permanent</option>
-              <option value="60">1 Hour</option>
-              <option value="1440">24 Hours</option>
-              <option value="10080">7 Days</option>
-              <option value="43200">30 Days</option>
-            </select>
+            <Dropdown value={banDuration} onChange={setBanDuration} options={[{ value: '-1', label: 'Permanent' }, { value: '60', label: '1 Hour' }, { value: '1440', label: '24 Hours' }, { value: '10080', label: '7 Days' }, { value: '43200', label: '30 Days' }]} />
           </div>
         </div>
       </Modal>

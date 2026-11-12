@@ -84,7 +84,7 @@
   min-width: 0;
   overflow-y: auto;
   padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 5vw, 4.5rem);
-  background: linear-gradient(135deg, rgba(0, 0, 0, 0.18), transparent 45%);
+  background: linear-gradient(135deg, var(--color-shadow), transparent 45%);
 }
 
 .tabContent {
@@ -279,7 +279,7 @@
 .primaryAction:hover,
 .addChannelForm > button:hover {
   filter: brightness(1.08);
-  box-shadow: 0 0.5rem 1.25rem rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0.5rem 1.25rem var(--color-shadow);
   transform: translateY(-2px);
 }
 
@@ -322,7 +322,7 @@
   border: 1px solid var(--color-outline-variant);
   border-radius: var(--radius-md);
   background: var(--color-surface-container-low);
-  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1rem 2.5rem var(--color-shadow-weak);
 }
 
 .formHeading {
@@ -443,7 +443,7 @@
   height: 3px;
   background: var(--color-primary);
   border-radius: 3px;
-  box-shadow: 0 0 10px rgba(173, 198, 255, 0.7);
+  box-shadow: 0 0 10px var(--color-primary-strong);
   z-index: 2;
 }
 .channelItem.dropBefore::before { top: -2px; }

@@ -4,30 +4,50 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--color-scrim);
   backdrop-filter: blur(4px);
   z-index: 1000;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.3s;
+  animation: tutorialOverlayIn 0.3s ease;
 }
 
 .hasTarget {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--color-scrim);
 }
 
 .popover {
   width: 100%;
   max-width: 320px;
   background: var(--color-surface-container-high);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-xl);
   padding: 1.5rem;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 100vmax rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px var(--color-shadow), 0 0 0 100vmax var(--color-scrim);
   position: absolute;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: tutorialPopIn 0.3s ease;
   z-index: 1001;
+}
+
+@keyframes tutorialOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tutorialPopIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .center {
@@ -59,7 +79,7 @@
 .progress {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--tint-subtle);
   border-radius: var(--radius-full);
   margin-bottom: 1.5rem;
   overflow: hidden;
@@ -101,7 +121,7 @@
 
 .nextBtn {
   background: var(--color-primary);
-  color: white;
+  color: var(--color-on-primary);
   border: none;
   padding: 0.6rem 1.25rem;
   border-radius: var(--radius-full);
@@ -124,8 +144,8 @@
   width: 20px;
   height: 20px;
   background: var(--color-surface-container-high);
-  border-left: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-left: 1px solid var(--tint-active);
+  border-bottom: 1px solid var(--tint-active);
   rotate: 45deg;
 }
 

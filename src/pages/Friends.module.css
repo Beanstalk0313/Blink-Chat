@@ -1,0 +1,287 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem clamp(1rem, 3vw, 2.5rem) 3rem;
+  max-width: 60rem;
+  width: 100%;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  font: var(--font-label-sm);
+  letter-spacing: 0.12em;
+  color: var(--color-tertiary);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--tint-active);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-md);
+  cursor: pointer;
+}
+
+.tab .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.tab:hover {
+  color: var(--color-on-surface);
+  background: var(--tint-subtle);
+}
+
+.activeTab {
+  background: var(--color-secondary);
+  color: var(--color-on-secondary);
+}
+
+.tabBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: 0.65rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.personCard {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container);
+  border: 1px solid var(--tint-active);
+}
+
+.personInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.personInfo strong {
+  font: var(--font-label-md);
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.personInfo span {
+  font: var(--font-body-sm);
+  color: var(--color-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playingLine {
+  color: var(--color-primary) !important;
+}
+
+.personActions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.primaryBtn,
+.ghostBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.8rem;
+  border-radius: var(--radius-full);
+  font: var(--font-label-sm);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.primaryBtn {
+  background: var(--color-secondary);
+  color: var(--color-on-secondary);
+}
+
+.primaryBtn:hover {
+  filter: brightness(1.08);
+}
+
+.ghostBtn {
+  background: transparent;
+  border-color: var(--tint-active);
+  color: var(--color-on-surface-variant);
+}
+
+.ghostBtn:hover {
+  color: var(--color-on-surface);
+  background: var(--tint-subtle);
+}
+
+.primaryBtn:disabled,
+.ghostBtn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.primaryBtn .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.tag {
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-full);
+  background: var(--tint-subtle);
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+}
+
+.empty {
+  margin: 0;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--tint-active);
+  color: var(--color-tertiary);
+  font: var(--font-body-md);
+  text-align: center;
+}
+
+.error {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-error-container, rgba(248, 113, 113, 0.12));
+  color: var(--color-error, #f87171);
+  font: var(--font-body-sm);
+}
+
+.subsection {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.subsection h2 {
+  margin: 0 0 0.25rem;
+  color: var(--color-tertiary);
+  letter-spacing: 0.1em;
+}
+
+.pendingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-container);
+  border: 1px solid var(--tint-active);
+  font: var(--font-body-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--tint-active);
+  color: var(--color-tertiary);
+}
+
+.searchBox input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-on-surface);
+  font: var(--font-body-md);
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.hint {
+  margin: 0.4rem 0 0;
+  font: var(--font-body-sm);
+  color: var(--color-tertiary);
+}
+
+.searchBox button {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .header {
+    align-items: flex-start;
+  }
+
+  .tabs {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .tab {
+    flex: 1;
+    justify-content: center;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .tab span:not(.material-symbols-outlined):not(.tabBadge) {
+    display: none;
+  }
+
+  .personCard {
+    flex-wrap: wrap;
+  }
+
+  .personActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

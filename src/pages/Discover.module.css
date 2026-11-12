@@ -17,23 +17,23 @@
 }
 
 .card {
-  background-color: rgba(31, 31, 33, 0.4);
+  background-color: var(--color-surface-container-low);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--tint-subtle);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 10px 15px -3px var(--color-shadow-weak);
 }
 
 .card:hover {
   transform: translateY(-4px);
-  background-color: rgba(42, 42, 44, 0.6);
-  border-color: rgba(173, 198, 255, 0.2);
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 0 30px rgba(173, 198, 255, 0.1);
+  background-color: var(--color-surface-container-high);
+  border-color: var(--color-primary-medium);
+  box-shadow: 0 20px 25px -5px var(--color-shadow), 0 0 30px var(--color-primary-soft);
 }
 
 .cardHeader {
@@ -66,9 +66,9 @@
   width: 100%;
   padding: 0.75rem;
   border-radius: var(--radius-full);
-  background-color: rgba(173, 198, 255, 0.1);
+  background-color: var(--color-primary-soft);
   color: var(--color-primary);
-  border: 1px solid rgba(173, 198, 255, 0.2);
+  border: 1px solid var(--color-primary-medium);
   font: var(--font-label-md);
   cursor: pointer;
   transition: all 0.3s;
@@ -86,7 +86,7 @@
 
 .shareBtn {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tint-active);
   color: var(--color-tertiary);
   cursor: pointer;
   padding: 0.75rem;
@@ -98,8 +98,8 @@
 }
 
 .shareBtn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: white;
+  background: var(--tint-active);
+  color: var(--color-on-surface);
 }
 
 .loading, .emptyState {

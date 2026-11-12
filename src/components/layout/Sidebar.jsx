@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import UserAvatar from '../common/UserAvatar';
 import { getColor, readStoredValue, writeStoredValue } from '../../services/utils';
 import { clearSessionCache, getCommunity, getUnreadCounts, getUnreadMentionCountsByCommunity, leaveCommunity, markAllChannelsRead, setCommunityMuted, subscribeToPrivateConversations, togglePinCommunity } from '../../services/db';
+import { subscribeToIncomingFriendRequests } from '../../services/friends';
+import { useOwnGamePresence } from '../../services/gamePresence';
 import styles from './Sidebar.module.css';
+
+// One coalesced refresh per burst of unread activity. The badges used to be
+// recomputed for every channel on every incoming message, which meant a full
+// Firestore + RTDB pass per message.
+const UNREAD_REFRESH_DEBOUNCE_MS = 800;
 
 const Sidebar = () => {
   const location = useLocation();
@@ -21,6 +28,8 @@ const Sidebar = () => {
   const [isPinned, setIsPinned] = useState(() => readStoredValue('sidebarPinned') === 'true');
   const [contextMenu, setContextMenu] = useState(null); // { x, y, community }
   const [unreadMentionCounts, setUnreadMentionCounts] = useState({});
+  const [pendingFriendRequests, setPendingFriendRequests] = useState([]);
+  const ownGame = useOwnGamePresence();
 
   const pinnedIds = currentUser?.profile?.pinnedCommunities || [];
   const pinnedSet = new Set(pinnedIds.slice(0, 3));
@@ -38,6 +47,20 @@ const Sidebar = () => {
     .slice(0, 3);
   const unreadPrivateCount = privateConversations.filter(conversation => conversation.lastSenderUid && conversation.lastSenderUid !== currentUser?.uid && conversation.updatedAt > (conversation.lastReadAt || 0)).length;
   const unreadPrivateBadgeCount = privateConversations.filter(conversation => !conversation.muted && conversation.lastSenderUid && conversation.lastSenderUid !== currentUser?.uid && conversation.updatedAt > (conversation.lastReadAt || 0)).length;
+  // Who wrote the unread private messages, newest first and one entry per
+  // person (several unread conversations with the same person show one face).
+  const unreadPrivateSenders = (() => {
+    const seen = new Set();
+    return privateConversations
+      .filter(conversation => !conversation.muted && conversation.lastSenderUid && conversation.lastSenderUid !== currentUser?.uid && conversation.updatedAt > (conversation.lastReadAt || 0))
+      .sort((first, second) => (second.updatedAt || 0) - (first.updatedAt || 0))
+      .reduce((senders, conversation) => {
+        if (seen.has(conversation.lastSenderUid)) return senders;
+        seen.add(conversation.lastSenderUid);
+        senders.push({ uid: conversation.lastSenderUid, user: conversation.participants?.[conversation.lastSenderUid] || { uid: conversation.lastSenderUid, displayName: 'User' } });
+        return senders;
+      }, []);
+  })();
 
   useEffect(() => {
     const currentCommunityId = location.pathname.match(/^\/channels\/([^/]+)/)?.[1];
@@ -54,63 +77,94 @@ const Sidebar = () => {
     return () => { cancelled = true; };
   }, [location.pathname]);
 
+  const joinedIdsKey = (currentUser?.profile?.joinedCommunities || []).join(',');
+
   const loadJoinedCommunities = useCallback(() => {
-    const joinedIds = currentUser?.profile?.joinedCommunities || [];
+    const joinedIds = joinedIdsKey ? joinedIdsKey.split(',') : [];
     if (!joinedIds.length) return Promise.resolve({ communities: [], unread: {} });
     return Promise.all([
       Promise.all(joinedIds.map(id => getCommunity(id))),
-      getUnreadCounts(currentUser.uid, joinedIds)
+      getUnreadCounts(currentUser?.uid, joinedIds)
     ]).then(([communities, unread]) => ({ communities: communities.filter(Boolean), unread }));
-  }, [currentUser]);
+  }, [currentUser?.uid, joinedIdsKey]);
+
+  // Community list, unread dots and mention numbers are refreshed together and
+  // at most once per debounce window, instead of once per incoming message.
+  const refreshRef = useRef(null);
+  const unreadRefreshTimerRef = useRef(0);
+  const unreadRefreshInFlightRef = useRef(false);
+  const unreadRefreshQueuedRef = useRef(false);
+  const unreadRefreshSeqRef = useRef(0);
+
+  const scheduleUnreadRefresh = useCallback((delay = UNREAD_REFRESH_DEBOUNCE_MS) => {
+    if (unreadRefreshTimerRef.current) window.clearTimeout(unreadRefreshTimerRef.current);
+    unreadRefreshTimerRef.current = window.setTimeout(() => {
+      unreadRefreshTimerRef.current = 0;
+      refreshRef.current?.();
+    }, delay);
+  }, []);
+
+  const refreshUnread = useCallback(async () => {
+    const uid = currentUser?.uid;
+    if (!uid) return;
+    // Never stack passes: a second request while one is running is folded into
+    // a single follow-up pass.
+    if (unreadRefreshInFlightRef.current) {
+      unreadRefreshQueuedRef.current = true;
+      return;
+    }
+    unreadRefreshInFlightRef.current = true;
+    const seq = ++unreadRefreshSeqRef.current;
+    const joinedIds = joinedIdsKey ? joinedIdsKey.split(',') : [];
+    clearSessionCache(`unread:${uid}`);
+    clearSessionCache(`unread-mentions:${uid}`);
+    try {
+      const [{ communities, unread }, mentions] = await Promise.all([
+        loadJoinedCommunities(),
+        getUnreadMentionCountsByCommunity(uid, joinedIds)
+      ]);
+      // A newer pass started while this one was in flight: drop the result.
+      if (seq !== unreadRefreshSeqRef.current) return;
+      setJoinedCommunities(communities);
+      setUnreadCommunities(unread);
+      setUnreadMentionCounts(mentions);
+    } catch (error) {
+      console.warn('Could not refresh unread badges:', error);
+    } finally {
+      unreadRefreshInFlightRef.current = false;
+      if (unreadRefreshQueuedRef.current) {
+        unreadRefreshQueuedRef.current = false;
+        scheduleUnreadRefresh(150);
+      }
+    }
+  }, [currentUser?.uid, joinedIdsKey, loadJoinedCommunities, scheduleUnreadRefresh]);
 
   useEffect(() => {
-    let cancelled = false;
-    const joinedIds = currentUser?.profile?.joinedCommunities || [];
-    Promise.all(joinedIds.map(id => getCommunity(id))).then(communities => {
-      if (!cancelled) setJoinedCommunities(communities.filter(Boolean));
-    }).catch(() => {});
-    loadJoinedCommunities().then(({ unread }) => {
-      if (!cancelled) setUnreadCommunities(unread);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, [loadJoinedCommunities, currentUser?.profile?.joinedCommunities]);
-
-  useEffect(() => {
-    const handleUnreadChanged = () => {
-      clearSessionCache(`unread:${currentUser?.uid}`);
-      loadJoinedCommunities().then(({ unread }) => setUnreadCommunities(unread)).catch(() => {});
-    };
-    window.addEventListener('blink:unread-changed', handleUnreadChanged);
-    window.addEventListener('blink:message-received', handleUnreadChanged);
-    return () => {
-      window.removeEventListener('blink:unread-changed', handleUnreadChanged);
-      window.removeEventListener('blink:message-received', handleUnreadChanged);
-    };
-  }, [loadJoinedCommunities, currentUser?.uid]);
+    refreshRef.current = refreshUnread;
+  }, [refreshUnread]);
 
   useEffect(() => {
     if (!currentUser?.uid) return undefined;
-    let cancelled = false;
-    const refreshMentionBadge = () => {
-      clearSessionCache(`unread-mentions:${currentUser?.uid}`);
-      getUnreadMentionCountsByCommunity(currentUser.uid, currentUser?.profile?.joinedCommunities || [])
-        .then(counts => { if (!cancelled) setUnreadMentionCounts(counts); })
-        .catch(() => {});
-    };
-    refreshMentionBadge();
-    window.addEventListener('blink:unread-changed', refreshMentionBadge);
-    window.addEventListener('blink:message-received', refreshMentionBadge);
-    const handleVisibility = () => { if (document.visibilityState === 'visible') refreshMentionBadge(); };
+    // Scheduled (not called inline) so the badges load in a callback rather
+    // than cascading a render straight out of the effect body.
+    scheduleUnreadRefresh(0);
+    const handleUnreadChanged = () => scheduleUnreadRefresh();
+    const handleVisibility = () => { if (document.visibilityState === 'visible') scheduleUnreadRefresh(); };
+    window.addEventListener('blink:unread-changed', handleUnreadChanged);
+    window.addEventListener('blink:message-received', handleUnreadChanged);
     window.addEventListener('focus', handleVisibility);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      cancelled = true;
-      window.removeEventListener('blink:unread-changed', refreshMentionBadge);
-      window.removeEventListener('blink:message-received', refreshMentionBadge);
+      window.removeEventListener('blink:unread-changed', handleUnreadChanged);
+      window.removeEventListener('blink:message-received', handleUnreadChanged);
       window.removeEventListener('focus', handleVisibility);
       document.removeEventListener('visibilitychange', handleVisibility);
+      if (unreadRefreshTimerRef.current) {
+        window.clearTimeout(unreadRefreshTimerRef.current);
+        unreadRefreshTimerRef.current = 0;
+      }
     };
-  }, [currentUser?.uid, currentUser?.profile?.joinedCommunities]);
+  }, [currentUser?.uid, refreshUnread, scheduleUnreadRefresh]);
 
   // Reflect unread mentions + private messages in the browser tab title.
   useEffect(() => {
@@ -126,10 +180,16 @@ const Sidebar = () => {
         setPrivateConversations([]);
         setUnreadCommunities({});
         setUnreadMentionCounts({});
+        setPendingFriendRequests([]);
       });
       return undefined;
     }
     return subscribeToPrivateConversations(currentUser.uid, setPrivateConversations);
+  }, [currentUser?.uid]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return undefined;
+    return subscribeToIncomingFriendRequests(currentUser.uid, setPendingFriendRequests);
   }, [currentUser?.uid]);
 
   const togglePin = () => {
@@ -177,10 +237,7 @@ const Sidebar = () => {
         await leaveCommunity(currentUser.uid, communityId);
         if (location.pathname.startsWith(`/channels/${communityId}`)) navigate('/');
       }
-      loadJoinedCommunities().then(({ communities, unread }) => {
-        setJoinedCommunities(communities);
-        setUnreadCommunities(unread);
-      }).catch(() => {});
+      refreshUnread();
     } catch (error) {
       window.alert(error.message || 'Something went wrong.');
     }
@@ -209,15 +266,17 @@ const Sidebar = () => {
     <div className={styles.topSection}>
       <div className={styles.brandRow}><Link to="/" className={styles.navItem} style={{ marginBottom: '0.5rem' }}><div className={styles.iconWrapper}><img src="/logo.svg" alt="Blink Logo" style={{ width: '28px', height: '28px', display: 'block', objectFit: 'contain' }} /></div><span className={styles.navLabel} style={{ fontWeight: 800 }}>Blink Chat</span></Link><button className={`${styles.pinButton} ${isPinned ? styles.active : ''}`} onClick={togglePin} title={isPinned ? 'Unpin sidebar' : 'Pin sidebar'}><span className="material-symbols-outlined">{isPinned ? 'keep' : 'keep_off'}</span></button></div>
       <Link to="/profile" className={styles.profileWrapper}><div className={styles.iconWrapper}><UserAvatar user={currentUser?.profile?.displayName ? currentUser.profile : currentUser} size="2.5rem" /></div><span className={styles.navLabel}>{currentUser?.profile?.displayName || currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User'}</span><span className={styles.tooltip}>Profile</span></Link>
+      {ownGame && <div className={styles.gameRow} title={`Playing ${ownGame.name}`}><span className="material-symbols-outlined">sports_esports</span><span className={styles.gameRowName}>{ownGame.name}</span></div>}
       <div className={styles.divider} />
-      <Link to="/messages" className={`${styles.navItem} ${location.pathname === '/messages' ? styles.active : ''}`}><div className={styles.iconWrapper}><span className="material-symbols-outlined">forum</span></div><span className={styles.navLabel}>Private Messages</span>{unreadPrivateCount > 0 && <span className={styles.unreadDot} title="Unread private messages">{unreadPrivateCount > 9 ? '9+' : unreadPrivateCount}</span>}<span className={styles.tooltip}>Private Messages</span></Link>
+      <Link to="/messages" className={`${styles.navItem} ${location.pathname === '/messages' ? styles.active : ''}`} title={unreadPrivateSenders.length ? `Unread from ${unreadPrivateSenders.map(sender => sender.user?.displayName || 'Someone').join(', ')}` : undefined}><div className={styles.iconWrapper}><span className="material-symbols-outlined">forum</span></div><span className={styles.navLabel}>Private Messages</span>{unreadPrivateSenders.length > 0 && <div className={styles.pmFaces} aria-hidden="true">{unreadPrivateSenders.slice(0, 4).map(sender => <UserAvatar key={sender.uid} user={sender.user} size="1.3rem" className={styles.pmFace} />)}{unreadPrivateSenders.length > 4 && <span className={styles.pmFaceMore}>+{unreadPrivateSenders.length - 4}</span>}</div>}{unreadPrivateCount > 0 && <span className={styles.unreadDot} title="Unread private messages">{unreadPrivateCount > 9 ? '9+' : unreadPrivateCount}</span>}{unreadPrivateSenders.length > 0 && <span className={styles.pmFaceRail} aria-hidden="true"><UserAvatar user={unreadPrivateSenders[0].user} size="1.25rem" /></span>}<span className={styles.tooltip}>Private Messages</span></Link>
+      <Link to="/friends" className={`${styles.navItem} ${location.pathname === '/friends' ? styles.active : ''}`} title={pendingFriendRequests.length ? `${pendingFriendRequests.length} pending friend request${pendingFriendRequests.length === 1 ? '' : 's'}` : 'Friends'}><div className={styles.iconWrapper}><span className="material-symbols-outlined">group</span></div><span className={styles.navLabel}>Friends</span>{pendingFriendRequests.length > 0 && <span className={styles.unreadDot}>{pendingFriendRequests.length > 9 ? '9+' : pendingFriendRequests.length}</span>}<span className={styles.tooltip}>Friends</span></Link>
       <div className={styles.divider} />
       {pinnedCommunities.length > 0 && <><div className={styles.pinnedLabel}><div className={styles.iconWrapper} style={{ background: 'transparent', border: 'none' }}><span className="material-symbols-outlined">push_pin</span></div><span className={styles.navLabel}>Pinned communities</span></div>{pinnedCommunities.map(communityLink)}<div className={styles.divider} /></>}
       {recentCommunities.length > 0 && <>{recentCommunities.map(communityLink)}<div className={styles.divider} /></>}
       {navItems.map(item => <Link key={item.label} to={item.to} className={`${styles.navItem} ${location.pathname === item.to || (item.to !== '/' && location.pathname.startsWith(item.to)) ? styles.active : ''}`}><div className={styles.iconWrapper}><span className="material-symbols-outlined">{item.icon}</span></div><span className={styles.navLabel}>{item.label}</span>{item.to === '/communities' && Object.values(unreadMentionCounts).some(count => count > 0) && <span className={styles.unreadDot}>{(() => { const count = Object.values(unreadMentionCounts).reduce((sum, value) => sum + value, 0); return count > 99 ? '99+' : count; })()}</span>}<span className={styles.tooltip}>{item.label}</span></Link>)}
       <button className={styles.navItem} onClick={() => navigate('/create-community')}><div className={styles.iconWrapper}><span className="material-symbols-outlined">add</span></div><span className={styles.navLabel}>Create</span><span className={styles.tooltip}>Create Community</span></button>
     </div>
-    <div className={styles.bottomSection}><Link to="/settings" className={`${styles.navItem} ${location.pathname === '/settings' ? styles.active : ''}`}><div className={styles.iconWrapper}><span className="material-symbols-outlined">settings</span></div><span className={styles.navLabel}>Settings</span><span className={styles.tooltip}>Settings</span></Link><button className={`${styles.navItem} ${styles.logoutBtn}`} onClick={handleLogout}><div className={styles.iconWrapper}><span className="material-symbols-outlined">logout</span></div><span className={styles.navLabel}>Logout</span><span className={styles.tooltip}>Logout</span></button></div>
+    <div className={styles.bottomSection}><Link to="/settings" className={`${styles.navItem} ${location.pathname === '/settings' ? styles.active : ''}`}><div className={styles.iconWrapper}><span className="material-symbols-outlined">settings</span></div><span className={styles.navLabel}>Settings</span><span className={styles.tooltip}>Settings</span></Link><Link to="/whats-new" className={`${styles.navItem} ${location.pathname === '/whats-new' ? styles.active : ''}`}><div className={styles.iconWrapper}><span className="material-symbols-outlined">history</span></div><span className={styles.navLabel}>What&apos;s New</span><span className={styles.tooltip}>What&apos;s New</span></Link><button className={`${styles.navItem} ${styles.logoutBtn}`} onClick={handleLogout}><div className={styles.iconWrapper}><span className="material-symbols-outlined">logout</span></div><span className={styles.navLabel}>Logout</span><span className={styles.tooltip}>Logout</span></button></div>
     {contextMenu && createPortal(<>
       <div className={styles.contextMenuBackdrop} onClick={() => setContextMenu(null)} onContextMenu={event => { event.preventDefault(); setContextMenu(null); }} />
       <div className={styles.contextMenu} style={{ top: contextMenu.y, left: contextMenu.x }}>

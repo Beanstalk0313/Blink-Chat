@@ -12,8 +12,8 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--color-surface-container-high);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--tint-active);
+  box-shadow: 0 25px 50px -12px var(--color-shadow-strong);
   /* Above page content inside the main pane, below app-wide modals (z-index 1000). */
   z-index: 950;
   transition:
@@ -71,8 +71,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--tint-subtle);
+  border-bottom: 1px solid var(--tint-subtle);
   flex-shrink: 0;
 }
 
@@ -111,7 +111,7 @@
 }
 
 .actions button:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--tint-active);
 }
 
 .endBtn {
@@ -121,7 +121,7 @@
 .iframeContainer {
   flex: 1;
   min-height: 0;
-  background: #000;
+  background: var(--color-surface-container-lowest);
   transition: opacity 180ms ease;
 }
 

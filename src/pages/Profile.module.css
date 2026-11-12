@@ -10,9 +10,9 @@
 .card {
   width: 100%;
   max-width: 800px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--tint-faint);
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--tint-subtle);
   overflow: hidden;
   animation: slideUp 0.5s ease-out;
 }
@@ -24,11 +24,11 @@
 
 .header {
   padding: 3rem;
-  background: linear-gradient(to bottom, rgba(173, 198, 255, 0.05), transparent);
+  background: linear-gradient(to bottom, var(--color-primary-soft), transparent);
   display: flex;
   align-items: center;
   gap: 2rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--tint-subtle);
   position: relative;
 }
 
@@ -40,7 +40,7 @@
   overflow: hidden;
   position: relative;
   flex-shrink: 0;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  box-shadow: 0 10px 30px var(--color-shadow);
 }
 
 .avatar {
@@ -69,7 +69,7 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0,0,0,0.5);
+  background: var(--color-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,14 +84,26 @@
 
 .info {
   flex: 1;
+  min-width: 0;
+}
+
+/* Long display names and emails wrap inside the card instead of being clipped
+   by the card's overflow: hidden (they used to run off the right edge). */
+.info h1 {
+  overflow-wrap: anywhere;
+  line-height: 1.1;
+}
+
+.info p {
+  overflow-wrap: anywhere;
 }
 
 .nameInput {
-  background: rgba(0,0,0,0.2);
+  background: var(--color-surface-container-lowest);
   border: 1px solid var(--color-primary);
   border-radius: var(--radius-md);
   padding: 0.5rem 1rem;
-  color: white;
+  color: var(--color-on-surface);
   font: var(--font-headline-md);
   width: 100%;
 }
@@ -130,7 +142,7 @@
 
 .editBtn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(173, 198, 255, 0.4);
+  box-shadow: 0 5px 15px var(--color-primary-strong);
 }
 
 .body {
@@ -152,11 +164,11 @@
 }
 
 .textarea {
-  background: rgba(0,0,0,0.2);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--tint-active);
   border-radius: var(--radius-md);
   padding: 1rem;
-  color: white;
+  color: var(--color-on-surface);
   font: var(--font-body-md);
   min-height: 120px;
   width: 100%;
@@ -167,7 +179,7 @@
   display: flex;
   gap: 4rem;
   padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--tint-subtle);
 }
 
 .statItem {
@@ -195,9 +207,62 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 1.25rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--tint-subtle);
   border-radius: var(--radius-full);
   color: var(--color-tertiary);
   font-weight: 500;
   font-size: 0.9rem;
+}
+
+/* Phones: the desktop card (3rem padding, 120px avatar, oversized display
+   name and row layout) crushed the header, so the profile now stacks. */
+@media (max-width: 760px) {
+  .container {
+    padding: 1rem;
+  }
+
+  .card {
+    border-radius: var(--radius-lg);
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .avatarWrapper {
+    width: 84px;
+    height: 84px;
+    border-radius: var(--radius-md);
+  }
+
+  .avatarPlaceholder span {
+    font-size: 2.75rem;
+  }
+
+  .info {
+    width: 100%;
+  }
+
+  .info h1 {
+    font-size: clamp(1.6rem, 7vw, 2.1rem);
+  }
+
+  .editBtn,
+  .pmBlocked {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .body {
+    padding: 1.5rem;
+    gap: 1.75rem;
+  }
+
+  .stats {
+    gap: 2.5rem;
+    justify-content: space-around;
+  }
 }

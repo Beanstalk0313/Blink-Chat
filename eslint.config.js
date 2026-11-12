@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'dist-native']),
+  // dist is generated; src-tauri holds Rust sources plus its build output
+  // (target/, gen/) and binary icons, none of which are JavaScript to lint.
+  globalIgnores(['dist', 'src-tauri']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [

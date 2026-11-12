@@ -17,6 +17,10 @@
               ".write": "auth != null && newData.child('uid').val() === auth.uid",
               ".validate": "newData.hasChildren(['uid', 'cell', 'mark', 'timestamp']) && newData.child('uid').isString() && newData.child('cell').isNumber() && newData.child('cell').val() >= 0 && newData.child('cell').val() < 64 && newData.child('mark').isString() && newData.child('mark').val().length <= 1 && newData.child('timestamp').isNumber()"
             }
+          },
+          "status": {
+            ".write": "auth != null && (newData.parent().child('opponentUid').val() === auth.uid || newData.parent().parent().child('authorUid').val() === auth.uid)",
+            ".validate": "!newData.exists() || (newData.isString() && (newData.val() === 'active' || newData.val() === 'declined'))"
           }
         },
         "reactions": {
@@ -71,7 +75,7 @@
 
     "privateConversations": {
       "$conversationId": {
-        ".read": "auth != null && data.child('members').child(auth.uid).exists()",
+        ".read": "auth != null && ((!data.exists() && ($conversationId.beginsWith(auth.uid + '_') || $conversationId.endsWith('_' + auth.uid))) || data.child('members').child(auth.uid).exists())",
         ".write": "auth != null && newData.child('members').child(auth.uid).exists()",
         ".validate": "newData.hasChildren(['members']) && newData.child('members').hasChildren()",
         "messages": {

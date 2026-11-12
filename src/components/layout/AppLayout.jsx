@@ -37,7 +37,7 @@ const AppLayout = () => {
   const { applyTheme } = useTheme();
 
   // "What's new": on the first run of every new version, open the changelog
-  // once (same behavior as Blink Native).
+  // once per device.
   useEffect(() => {
     if (checkAndMarkSeenVersion()) navigate('/whats-new', { replace: false });
   }, [navigate]);

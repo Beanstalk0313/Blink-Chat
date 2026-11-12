@@ -10,15 +10,15 @@
 }
 
 .bannedCard {
-  background: rgba(239, 68, 68, 0.05);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: var(--color-error-soft);
+  border: 1px solid var(--color-error-medium);
   padding: 4rem;
   border-radius: var(--radius-xl);
   display: flex;
   flex-direction: column;
   align-items: center;
   max-width: 600px;
-  box-shadow: 0 25px 50px -12px rgba(239, 68, 68, 0.1);
+  box-shadow: 0 25px 50px -12px var(--color-error-soft);
 }
 
 .backBtn {
@@ -26,7 +26,7 @@
   padding: 1rem 2rem;
   background: var(--color-primary);
   border: none;
-  color: white;
+  color: var(--color-on-primary);
   border-radius: var(--radius-full);
   font: var(--font-label-md);
   cursor: pointer;
@@ -34,6 +34,6 @@
 }
 
 .backBtn:hover {
-  background: #2563eb;
+  background: var(--color-primary);
   transform: translateY(-2px);
 }
