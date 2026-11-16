@@ -1,10 +1,14 @@
 .container {
+  /* Fixed to the viewport so the card is centred no matter how the shell (or
+     the desktop webview) sizes its parent. */
+  position: fixed;
+  inset: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  min-height: 100vh;
+  overflow: auto;
+  /* Reserve the scrollbar on both sides so the card stays optically centred. */
+  scrollbar-gutter: stable both-edges;
   padding: var(--container-padding);
   /* The shell is the lighter surface now, so the signed-out screen keeps its
      own dark backdrop or the glass card would disappear into the page. */
@@ -13,6 +17,9 @@
 }
 
 .card {
+  /* auto margins centre the card when it fits and keep the top reachable when
+     the window is too short to show it whole. */
+  margin: auto;
   width: 100%;
   max-width: 400px;
   background-color: var(--glass-panel);
@@ -55,6 +62,16 @@
   opacity: 0.15;
   border-radius: 50%;
   pointer-events: none;
+}
+
+/* The desktop window is 800px tall, which leaves ~720px of web view: tighten
+   the card so the whole form (including the sign-up link) fits without a
+   scrollbar. */
+@media (max-height: 820px) {
+  .card {
+    padding: 1.75rem 1.5rem;
+    gap: 1.25rem;
+  }
 }
 
 .header {

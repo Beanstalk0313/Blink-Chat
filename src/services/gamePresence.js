@@ -67,25 +67,50 @@ export function startGamePresence(uid, isEnabled = () => true) {
   if (!db || !uid || typeof window === 'undefined' || !isDesktopApp()) return () => {};
   let disposed = false;
   let current = null;
+  let startedAt = 0;
+  // Set when the presence write is rejected (rules can refuse a write that
+  // arrives before the online marker), so the next poll republishes instead of
+  // leaving friends with nothing until the game changes.
+  let unsynced = false;
   const presenceRef = ref(db, `presence/${uid}`);
 
-  const setGame = (game, startedAt) => {
+  const setGame = (game, started) => {
     current = game;
+    startedAt = started;
     publish(game ? { name: game.name, exe: game.exe, startedAt } : null);
     update(presenceRef, {
       game: game ? { name: game.name, exe: game.exe, startedAt, updatedAt: Date.now() } : null
-    }).catch(error => console.warn('Could not publish game activity:', error));
+    })
+      .then(() => {
+        unsynced = false;
+      })
+      .catch(error => {
+        unsynced = true;
+        console.warn('Could not publish game activity:', error);
+      });
   };
 
+  // A scan can outlive its interval on a busy machine; never stack them.
+  let polling = false;
+
   const poll = async () => {
-    if (disposed) return;
+    if (disposed || polling) return;
     if (!isEnabled()) {
       if (current) setGame(null, 0);
       return;
     }
-    const next = await detectRunningGame();
+    polling = true;
+    let next;
+    try {
+      next = await detectRunningGame();
+    } finally {
+      polling = false;
+    }
     if (disposed) return;
-    if ((next?.name || null) === (current?.name || null)) return;
+    if ((next?.name || null) === (current?.name || null)) {
+      if (unsynced) setGame(current, startedAt);
+      return;
+    }
     setGame(next, next ? Date.now() : 0);
   };
 

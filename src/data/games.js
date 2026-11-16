@@ -1,10 +1,11 @@
 // Game catalog for desktop game presence.
 //
 // One entry per game, matched against the executable names of running
-// processes. `hints` disambiguates titles that share an executable (Call of
-// Duty HQ runs every recent Call of Duty title from cod.exe, and Source games
-// all use hl2.exe); the window title reported by the OS is matched against the
-// hints, and the first entry for an executable is the fallback.
+// processes. Games that ship their own executable always win, which is why the
+// Call of Duty titles are listed by their numbered executables. `hints` is the
+// optional title-based tie-break for executables shared by several games; the
+// desktop shell currently reports executable names only, so the first entry for
+// an executable is what wins.
 //
 // Keep this list flat and dependency-free: it is imported by the detector, the
 // profile UI and the Tauri bridge, and it is the only place a game needs to be
@@ -13,19 +14,27 @@
 export const GAME_CATALOG = [
   // ---- Required titles -------------------------------------------------
   { name: 'Counter-Strike 2', exes: ['cs2.exe'] },
-  { name: 'Call of Duty', exes: ['cod.exe'], hints: ['call of duty'] },
-  { name: 'Call of Duty: Warzone', exes: ['cod.exe', 'warzone.exe'], hints: ['warzone'] },
-  { name: 'Call of Duty: Modern Warfare III (2023)', exes: ['cod.exe'], hints: ['modern warfare iii', 'mw3'] },
-  { name: 'Call of Duty: Modern Warfare II (2022)', exes: ['cod.exe'], hints: ['modern warfare ii', 'mw2'] },
+  // Call of Duty HQ runs the newest title and Warzone from cod.exe, so there is
+  // nothing to disambiguate: cod.exe answers with the generic name. Older
+  // titles ship their own numbered executable.
+  { name: 'Call of Duty', exes: ['cod.exe'] },
+  { name: 'Call of Duty: Modern Warfare III (2023)', exes: ['cod23-cod.exe'] },
+  { name: 'Call of Duty: Modern Warfare II (2022)', exes: ['cod22-cod.exe'] },
   { name: 'Call of Duty: Modern Warfare (2019)', exes: ['modernwarfare.exe'] },
   { name: 'Delta Force', exes: ['deltaforceclient-win64-shipping.exe', 'deltaforce.exe'] },
-  { name: 'Portal', exes: ['portal.exe'] },
+  // Portal ships portal.exe but also runs as hl2.exe, the executable it shares
+  // with Half-Life 2 and Team Fortress 2; the window title picks the game.
+  { name: 'Portal', exes: ['portal.exe', 'hl2.exe'], hints: ['portal'] },
   { name: 'Portal 2', exes: ['portal2.exe'] },
 
   // ---- Valve / Source --------------------------------------------------
   { name: 'Counter-Strike: Global Offensive', exes: ['csgo.exe'] },
-  { name: 'Half-Life 2', exes: ['hl2.exe'], hints: ['half-life 2', 'half life 2'] },
-  { name: 'Team Fortress 2', exes: ['hl2.exe', 'tf_win64.exe'], hints: ['team fortress'] },
+  // hl2.exe is shared by every Source title without its own launcher:
+  // Half-Life 2, Portal and Team Fortress 2 all run as hl2.exe, so the window
+  // title decides. When the title says nothing, the entry whose *first*
+  // executable is hl2.exe wins, which is Half-Life 2.
+  { name: 'Half-Life 2', exes: ['hl2.exe'], hints: ['half-life 2', 'half life 2', 'hl2'] },
+  { name: 'Team Fortress 2', exes: ['tf_win64.exe', 'hl2.exe'], hints: ['team fortress', 'tf2'] },
   { name: 'Garry\u2019s Mod', exes: ['gmod.exe'] },
   { name: 'Left 4 Dead 2', exes: ['left4dead2.exe'] },
   { name: 'Half-Life: Alyx', exes: ['hlvr.exe'] },
@@ -38,13 +47,14 @@ export const GAME_CATALOG = [
   { name: 'Teamfight Tactics', exes: ['leagueclient.exe'], hints: ['teamfight tactics', 'tft'] },
   { name: 'Overwatch 2', exes: ['overwatch.exe'] },
   { name: 'World of Warcraft', exes: ['wow.exe'] },
+  { name: 'World of Warcraft Classic', exes: ['wowclassic.exe'] },
   { name: 'Diablo IV', exes: ['diablo iv.exe'] },
   { name: 'Hearthstone', exes: ['hearthstone.exe'] },
   { name: 'StarCraft II', exes: ['sc2_x64.exe'] },
   { name: 'Warcraft III: Reforged', exes: ['warcraft iii.exe'] },
 
   // ---- Epic / big-budget shooters -------------------------------------
-  { name: 'Fortnite', exes: ['fortniteclient-win64-shipping.exe'] },
+  { name: 'Fortnite', exes: ['fortniteclient-win64-shipping.exe', 'fortniteclient-win64-shipping_eac.exe'] },
   { name: 'Rocket League', exes: ['rocketleague.exe'] },
   { name: 'Fall Guys', exes: ['fallguys_client_game.exe'] },
   { name: 'Apex Legends', exes: ['r5apex.exe', 'r5apex_dx12.exe'] },
@@ -62,7 +72,7 @@ export const GAME_CATALOG = [
   { name: 'NBA 2K25', exes: ['nba2k25.exe'] },
 
   // ---- Ubisoft ---------------------------------------------------------
-  { name: 'Tom Clancy\u2019s Rainbow Six Siege', exes: ['rainbowsix.exe', 'rainbowsix_dx11.exe', 'rainbowsix_vulkan.exe'] },
+  { name: 'Tom Clancy\u2019s Rainbow Six Siege', exes: ['rainbowsix.exe', 'rainbowsix_dx11.exe', 'rainbowsix_vulkan.exe', 'rainbowsix_be.exe'] },
   { name: 'Tom Clancy\u2019s Ghost Recon Breakpoint', exes: ['grb.exe'] },
   { name: 'Tom Clancy\u2019s The Division 2', exes: ['thedivision2.exe'] },
   { name: 'For Honor', exes: ['forhonor.exe'] },
@@ -143,7 +153,7 @@ export const GAME_CATALOG = [
 
   // ---- Sandbox / creative / social -----------------------------------
   { name: 'Minecraft', exes: ['minecraft.windows.exe', 'minecraftlauncher.exe'] },
-  { name: 'Roblox', exes: ['robloxplayerbeta.exe'] },
+  { name: 'Roblox', exes: ['robloxplayerbeta.exe', 'robloxplayer.exe'] },
   { name: 'Halo Infinite', exes: ['haloinfinite.exe'] },
   { name: 'Halo: The Master Chief Collection', exes: ['mcc-win64-shipping.exe'] },
   { name: 'Destiny 2', exes: ['destiny2.exe'] },
@@ -187,14 +197,12 @@ export const GAME_CATALOG = [
   { name: 'Vampire Survivors', exes: ['vampiresurvivors.exe'] },
   { name: 'Bloons TD 6', exes: ['btd6.exe'] },
   { name: 'Outer Wilds', exes: ['outerwilds.exe'] },
-  { name: 'Outer Wilds: Echoes of the Eye', exes: ['outerwilds.exe'], hints: ['echoes of the eye'] },
   { name: 'Baldur\u2019s Gate 3', exes: ['bg3.exe', 'bg3_dx11.exe'] },
   { name: 'Divinity: Original Sin 2', exes: ['eocapp.exe'] },
   { name: 'Disco Elysium', exes: ['disco elysium.exe'] },
   { name: 'Undertale', exes: ['undertale.exe'] },
   { name: 'Deltarune', exes: ['deltarune.exe'] },
   { name: 'Stray', exes: ['stray-win64-shipping.exe'] },
-  { name: 'It Takes Two (Friend\u2019s Pass)', exes: ['ittakestwo.exe'], hints: ['friend'] },
   { name: 'Resident Evil 4', exes: ['re4.exe'] },
   { name: 'Resident Evil Village', exes: ['re8.exe'] },
   { name: 'Silent Hill 2', exes: ['sh2.exe'] },
@@ -221,7 +229,6 @@ export const GAME_CATALOG = [
   { name: 'Zenless Zone Zero', exes: ['zenlesszonezero.exe'] },
   { name: 'Wuthering Waves', exes: ['client-win64-shipping.exe'] },
   { name: 'Arknights: Endfield', exes: ['endfield.exe'] },
-  { name: 'Delta Force: Hawk Ops', exes: ['deltaforceclient-win64-shipping.exe'], hints: ['hawk ops'] },
   { name: 'The Sims 3', exes: ['ts3w.exe'] },
   { name: 'Cities: Skylines', exes: ['cities.exe'] },
   { name: 'Planet Coaster 2', exes: ['planetcoaster2.exe'] },
@@ -255,9 +262,14 @@ export function resolveRunningGame(processes = []) {
     const exe = String(process?.exe || '').toLowerCase();
     const candidates = byExecutable.get(exe);
     if (!candidates || !candidates.length) continue;
-    const title = String(process?.title || '').toLowerCase();
+    // Game windows sometimes pad titles with zero-width characters (Call of
+    // Duty does); strip them so hint matching is not defeated.
+    const title = String(process?.title || '').toLowerCase().replace(/[\u200b-\u200d\ufeff]/g, '');
     const hinted = title ? candidates.find(candidate => (candidate.hints || []).some(hint => title.includes(hint))) : null;
-    const match = hinted || candidates[0];
+    // Shared executables (hl2.exe) fall back to the game that owns the
+    // executable, not merely the first one listed that mentions it.
+    const owner = candidates.find(candidate => candidate.exes[0].toLowerCase() === exe);
+    const match = hinted || owner || candidates[0];
     return { name: match.name, exe };
   }
   return null;

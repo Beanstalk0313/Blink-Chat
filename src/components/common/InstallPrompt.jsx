@@ -5,7 +5,26 @@ export default function InstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // The desktop shell embeds its own assets, and a service worker there would
+    // keep serving the build it first cached, hiding every later update. Skip
+    // it and clear anything an older build left behind.
+    const isDesktopShell = typeof window !== 'undefined' && Boolean(window.__TAURI__);
+    if ('serviceWorker' in navigator) {
+      if (isDesktopShell) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+          .catch(() => {});
+        if ('caches' in window) {
+          caches
+            .keys()
+            .then(names => Promise.all(names.filter(name => name.startsWith('blink-shell-')).map(name => caches.delete(name))))
+            .catch(() => {});
+        }
+      } else {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+      }
+    }
     const handleInstall = event => {
       event.preventDefault();
       setInstallEvent(event);

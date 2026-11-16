@@ -10,6 +10,17 @@ file needs touching, though keeping package.json's version in sync is nice:
     - First note
     - Second note
 
+## 2.9.3 | 2026-11-16 | Faster game detection, and updates that actually arrive
+- Game detection now reads the process list directly from Windows instead of starting a helper program: it takes a few milliseconds, never opens a terminal window, and no longer writes temporary files.
+- Window titles are read again, which fixes games that share one executable. Half-Life 2, Portal and Team Fortress 2 all run as `hl2.exe`, so the window title now decides which one is shown (Half-Life 2 is the fallback when the title says nothing). Titles padded with invisible characters, like Call of Duty's, still match.
+- The desktop app no longer registers the web app's service worker. That worker was serving the bundle a build first cached, so the desktop app could keep running old code after an update.
+
+## 2.9.2 | 2026-11-15 | Desktop app stability and better game detection
+- Fixed the desktop app freezing or crashing a few seconds after the window appeared. The process scan that powers game activity was blocking the UI thread and opening a terminal window; it now runs in the background, hidden, and can't hang.
+- Game activity now names the Call of Duty you are actually playing: Modern Warfare III and Modern Warfare II report separately, and the newest title/Warzone reports as "Call of Duty" because they all share `cod.exe`.
+- Added a few missing executables (Fortnite's anti-cheat build, Rainbow Six Siege's BattlEye build, WoW Classic) and Roblox is picked up under both of its player executable names.
+- The signed-out screen is now centred in the desktop window instead of hugging the left edge.
+
 ## 2.9.1 | 2026-11-12 | Find people by name, and block
 - Adding a friend now needs the person's exact display name instead of a fuzzy search. Type a partial name and Blink finds nobody; this makes it much harder to trawl for strangers to send requests to.
 - Block is here: block from a mini profile, the Friends list, a friend request, or a name lookup. Blocking also ends the friendship and withdraws any pending request, and blocked people appear in their own list on the Friends page where you can unblock them.
