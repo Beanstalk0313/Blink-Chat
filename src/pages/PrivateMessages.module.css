@@ -497,11 +497,14 @@
 
 .loadingContainer {
   display: flex;
-  flex: 1;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1rem;
+  width: 100%;
+  min-height: 60vh;
+  text-align: center;
   color: var(--color-tertiary);
 }
 

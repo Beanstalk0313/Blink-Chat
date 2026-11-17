@@ -10,6 +10,11 @@ file needs touching, though keeping package.json's version in sync is nice:
     - First note
     - Second note
 
+## 2.9.4 | 2026-11-16 | Messages stay in order, loading screens centred
+- Messages are now stamped by the server instead of your device's clock, so a computer whose time is a few minutes off can no longer push one person's replies to the bottom of a conversation. Older messages whose stored time disagrees with their push ID by more than two minutes are ordered by the push ID, which is server-corrected, so existing conversations line up too.
+- Conversation ordering and unread badges follow the server too: a private conversation's `updatedAt` and a channel's `lastActivity` are server-stamped, so a skewed clock cannot reshuffle the message list or leave a badge stuck.
+- The loading screen (spinner and "Loading Blink…") is centred in the window instead of sitting against the left edge.
+
 ## 2.9.3 | 2026-11-16 | Faster game detection, and updates that actually arrive
 - Game detection now reads the process list directly from Windows instead of starting a helper program: it takes a few milliseconds, never opens a terminal window, and no longer writes temporary files.
 - Window titles are read again, which fixes games that share one executable. Half-Life 2, Portal and Team Fortress 2 all run as `hl2.exe`, so the window title now decides which one is shown (Half-Life 2 is the fallback when the title says nothing). Titles padded with invisible characters, like Call of Duty's, still match.

@@ -14,6 +14,7 @@ import {
   arrayUnion,
   onSnapshot,
   deleteField,
+  serverTimestamp as firestoreServerTimestamp,
   runTransaction
 } from 'firebase/firestore';
 import {
@@ -32,6 +33,7 @@ import {
   startAt,
   endAt,
   get,
+  serverTimestamp,
   runTransaction as runDatabaseTransaction
 } from 'firebase/database';
 
@@ -147,7 +149,7 @@ export async function createChannel(communityId, name, type = 'text', options = 
     slowModeSeconds: Number(options.slowModeSeconds) || 0,
     position: nextPosition,
     createdAt: new Date().toISOString(),
-    lastActivity: Date.now()
+    lastActivity: firestoreServerTimestamp()
   });
   clearSessionCache(`channels:${communityId}`);
   return newChannelRef.id;
@@ -412,12 +414,13 @@ export async function sendMessage(channelId, text, authorUid, attachment = null,
   if (!db) throw new Error('Realtime Database is not configured');
   const messagesRef = ref(db, `messages/${channelId}`);
   const newMessageRef = push(messagesRef);
-  const timestamp = Date.now();
   const message = {
     id: newMessageRef.key,
     text: text?.trim() || '',
     authorUid,
-    timestamp,
+    // The sender's clock cannot be trusted: a few minutes of drift put a
+    // person's messages after everyone else's. The server stamps it instead.
+    timestamp: serverTimestamp(),
     attachment: attachment || null,
     isPinned: false
   };
@@ -427,7 +430,7 @@ export async function sendMessage(channelId, text, authorUid, attachment = null,
   await set(newMessageRef, message);
   // Best-effort metadata only: the message is already stored in RTDB, so a
   // Firestore hiccup here must not make the UI report the message as failed.
-  updateDoc(doc(firestore, 'channels', channelId), { lastActivity: timestamp }).catch(error => {
+  updateDoc(doc(firestore, 'channels', channelId), { lastActivity: firestoreServerTimestamp() }).catch(error => {
     console.warn('Could not update channel activity:', error);
   });
   return newMessageRef;
@@ -451,7 +454,7 @@ export async function declineGameChallenge(channelId, messageId) {
 
 export async function editMessage(channelId, messageId, newText) {
   const result = await set(ref(db, `messages/${channelId}/${messageId}/text`), newText.trim());
-  updateDoc(doc(firestore, 'channels', channelId), { lastActivity: Date.now() }).catch(error => {
+  updateDoc(doc(firestore, 'channels', channelId), { lastActivity: firestoreServerTimestamp() }).catch(error => {
     console.warn('Could not update channel activity:', error);
   });
   return result;
@@ -574,15 +577,29 @@ function pushIdTimestamp(pushId) {
   return value;
 }
 
+// A stored timestamp can be minutes off when the sender's clock is wrong or
+// its server-offset estimate went stale. Push IDs are generated from the
+// server-corrected time, so they are the reliable clock; large disagreements
+// between the two mean the stored timestamp should not decide the order.
+const TIMESTAMP_SKEW_TOLERANCE_MS = 2 * 60 * 1000;
+
 // Messages are ordered by their stored timestamp, with the push ID as the
-// tie-breaker (same-millisecond writes) and as the fallback when a timestamp
-// is missing. Timestamp-first keeps the list in the order the timestamps on
-// screen claim; the push ID keeps same-ms writes deterministic.
+// tie-breaker (same-millisecond writes), the fallback when a timestamp is
+// missing, and the tie-breaker of last resort when the timestamp is clearly
+// wrong for that push ID.
 export function compareMessages(first, second) {
-  const firstTime = Number(first?.timestamp) || pushIdTimestamp(first?.id);
-  const secondTime = Number(second?.timestamp) || pushIdTimestamp(second?.id);
+  const firstTime = messageSortTime(first);
+  const secondTime = messageSortTime(second);
   if (firstTime !== secondTime) return firstTime - secondTime;
   return String(first.id).localeCompare(String(second.id));
+}
+
+function messageSortTime(message) {
+  const stored = Number(message?.timestamp) || 0;
+  const pushed = pushIdTimestamp(message?.id);
+  if (!pushed) return stored;
+  if (!stored) return pushed;
+  return Math.abs(stored - pushed) > TIMESTAMP_SKEW_TOLERANCE_MS ? pushed : stored;
 }
 
 function mergeMessagesById(...groups) {
@@ -1162,23 +1179,28 @@ export async function sendPrivateMessage(conversationId, senderUid, recipientUid
   if (!db) throw new Error('Realtime Database is not configured');
 
   const sortedMembers = [senderUid, recipientUid].sort();
-  const timestamp = Date.now();
 
   const conversationRef = ref(db, `privateConversations/${conversationId}`);
   // Update conversation metadata without replacing the existing messages
   // collection. A root-level set() here used to erase the conversation history.
+  // updatedAt is server-stamped too: it drives the conversation list order and
+  // the unread comparison, so it must not carry the sender's clock skew.
   await update(conversationRef, {
     members: { [sortedMembers[0]]: true, [sortedMembers[1]]: true },
     participants,
     lastMessage: trimmedText,
     lastSenderUid: senderUid,
-    updatedAt: timestamp
+    updatedAt: serverTimestamp()
   });
 
   const messageRef = push(ref(db, `privateConversations/${conversationId}/messages`));
-  await set(messageRef, { senderUid, text: trimmedText, timestamp });
+  // Server-stamped like channel messages, so a skewed device clock cannot
+  // reorder one person's private messages against the other's.
+  await set(messageRef, { senderUid, text: trimmedText, timestamp: serverTimestamp() });
 
-  await update(ref(db, `privateConversationsByUser/${senderUid}/${conversationId}`), { lastReadAt: timestamp });
+  // Same server clock as updatedAt, so the sender's own conversation cannot
+  // look unread because the two were stamped by different clocks.
+  await update(ref(db, `privateConversationsByUser/${senderUid}/${conversationId}`), { lastReadAt: serverTimestamp() });
   await update(ref(db, `privateConversationsByUser/${recipientUid}/${conversationId}`), { lastReadAt: 0 });
 
   clearSessionCache(`private-conversations:${senderUid}`);

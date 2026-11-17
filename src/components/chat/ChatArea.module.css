@@ -192,7 +192,9 @@
 .pinnedList { display: flex; flex-direction: column; gap: 0.75rem; }
 .pinnedMsgItem { padding: 0.75rem; background: var(--tint-subtle); border-radius: var(--radius-sm); }
 .pinnedMsgText { margin-top: 0.25rem; font-size: 0.9rem; line-height: 1.4; }
-.loadingContainer { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: var(--color-tertiary); }
+/* Full width and a minimum height so the spinner is centred in the window, not
+   squeezed into the corner of whatever wrapper it happens to land in. */
+.loadingContainer { display: flex; flex: 1 1 auto; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; width: 100%; min-height: 60vh; text-align: center; color: var(--color-tertiary); }
 .loader { width: 2.5rem; height: 2.5rem; border: 3px solid var(--tint-active); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
