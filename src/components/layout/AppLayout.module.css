@@ -85,11 +85,46 @@
     -webkit-backdrop-filter: blur(22px) saturate(150%);
   }
 
-  .brandName {
+  /* The brand is the home affordance on mobile: a pill with the logo and the
+     wordmark, so the bottom bar is free for content destinations. */
+  .brandHome {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    max-width: 55%;
+    padding: 0.3rem 0.8rem 0.3rem 0.35rem;
+    border: 1px solid var(--tint-hover);
+    border-radius: 999px;
+    background: var(--color-surface-container);
     color: var(--color-on-surface);
-    font: var(--font-headline-md);
-    font-weight: 700;
-    letter-spacing: -0.04em;
+    text-decoration: none;
+    transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
+  }
+
+  .brandHome:hover,
+  .brandHome:focus-visible {
+    background: var(--color-surface-container-high);
+    color: var(--color-primary);
+  }
+
+  .brandHome:active {
+    transform: scale(0.97);
+  }
+
+  .brandLogo {
+    display: block;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
+
+  .brandName {
+    color: inherit;
+    font: var(--font-label-lg);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    white-space: nowrap;
   }
 
   .topBarActions {
@@ -106,6 +141,9 @@
     height: 2.5rem;
     border-radius: 50%;
     color: var(--color-on-surface-variant);
+    /* Icon-only links: the anchor's underline otherwise paints beneath the
+       Material Symbol glyph. */
+    text-decoration: none;
     transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
   }
 
@@ -180,9 +218,13 @@
     font-size: 1.35rem;
   }
 
-  .bottomNavItem .text-label-sm {
+  /* `text-label-sm` is a global class from index.css, so it has to be escaped
+     from CSS Modules hashing or this rule silently matches nothing. */
+  .bottomNavItem :global(.text-label-sm) {
+    max-width: 100%;
     overflow: hidden;
     font-size: 0.65rem;
+    letter-spacing: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

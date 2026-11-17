@@ -285,3 +285,37 @@
     justify-content: flex-end;
   }
 }
+
+/* The real name under a private nickname, so a renamed friend is still
+   identifiable without opening their profile. */
+.realName {
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  font-style: normal;
+}
+
+.nicknameForm {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nicknameForm label {
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  letter-spacing: 0.08em;
+}
+
+.nicknameForm input {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  font: var(--font-body-md);
+  outline: none;
+}
+
+.nicknameForm input:focus {
+  border-color: var(--color-primary);
+}

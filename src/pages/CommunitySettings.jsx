@@ -1,29 +1,34 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  getCommunity, 
-  updateCommunity, 
-  getChannels, 
-  createChannel, 
-  updateChannel, 
-  deleteChannel, 
+import {
+  getCommunity,
+  updateCommunity,
+  getChannels,
+  createChannel,
+  updateChannel,
+  deleteChannel,
   getCommunityMembers,
   kickUser,
   banUser,
+  unbanUser,
   timeoutUser,
+  clearTimeoutUser,
+  getUserProfile,
   setMemberRoles,
   reorderChannels,
-  migrateCommunityPermissions
+  migrateCommunityPermissions,
+  clearChannelMessages
 } from '../services/db';
 import { useAuth } from '../contexts/AuthContext';
 import { compressAndConvert } from '../services/utils';
+import { inviteLinkFor } from '../services/invites';
 import UserAvatar from '../components/common/UserAvatar';
 import Modal from '../components/common/Modal';
 import Dropdown from '../components/common/Dropdown';
 import styles from './CommunitySettings.module.css';
 import ThemeSelect from '../components/common/ThemeSelect';
 import { useTheme } from '../contexts/ThemeContext';
-import { hasCommunityPermission, ROLE_PERMISSION_OPTIONS, normalizeRoleIds, buildMemberPermissions } from '../services/permissions';
+import { hasCommunityPermission, ROLE_PERMISSION_OPTIONS, normalizeRoleIds, buildMemberPermissions, voiceJoinMode } from '../services/permissions';
 import { ROLE_BADGE_PRESETS } from '../services/roleBadges';
 
 const SLOW_MODE_OPTIONS = [
@@ -54,6 +59,22 @@ const TIMEOUT_OPTIONS = [
   { label: '24 hours', minutes: 1440 }
 ];
 
+// Friendly remaining time for bans and timeouts ("2 hours left").
+function describeRemaining(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60000));
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.ceil(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  return `${Math.ceil(hours / 24)} days`;
+}
+
+function describeUntil(timestamp) {
+  if (timestamp === -1) return 'Permanent ban';
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return 'Banned';
+  return `Until ${date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 export default function CommunitySettings() {
   const { communityId } = useParams();
   const navigate = useNavigate();
@@ -73,35 +94,63 @@ export default function CommunitySettings() {
   const [iconBase64, setIconBase64] = useState('');
   const [zoom, setZoom] = useState(1);
   const [originalFile, setOriginalFile] = useState(null);
-  
-  const [newChannelName, setNewChannelName] = useState('');
-  const [newChannelType, setNewChannelType] = useState('text');
-  const [newChannelLocked, setNewChannelLocked] = useState(false);
-  const [newChannelSlowMode, setNewChannelSlowMode] = useState(0);
-  const [newAllowedRoles, setNewAllowedRoles] = useState([]);
+
+  // Creation and editing of channels and roles happens in a modal; these
+  // hold the in-progress draft and are null while the dialog is closed.
+  const [channelDraft, setChannelDraft] = useState(null);
+  const [roleDraft, setRoleDraft] = useState(null);
+  // Visibility is separate from the draft: closing flips `open` but keeps the
+  // draft, so the dialog still has its fields while the exit animation runs.
+  const [channelEditorOpen, setChannelEditorOpen] = useState(false);
+  const [roleEditorOpen, setRoleEditorOpen] = useState(false);
+  const [typeWarningOpen, setTypeWarningOpen] = useState(false);
+
   const [autoModProfanity, setAutoModProfanity] = useState(false);
   const [autoModLinks, setAutoModLinks] = useState(false);
   const [systemJoinEnabled, setSystemJoinEnabled] = useState(false);
   const [systemLeaveEnabled, setSystemLeaveEnabled] = useState(false);
   const [systemChannelId, setSystemChannelId] = useState('');
-  const [editingChannel, setEditingChannel] = useState(null);
-  const [editChannelName, setEditChannelName] = useState('');
-  const [newRoleName, setNewRoleName] = useState('');
-  const [newRoleColor, setNewRoleColor] = useState('#7dd3fc');
-  const [newRolePermissions, setNewRolePermissions] = useState([]);
-  const [newRoleBadge, setNewRoleBadge] = useState('spark');
-  const [editingRoleId, setEditingRoleId] = useState(null);
-  const [editRoleName, setEditRoleName] = useState('');
-  const [editRoleColor, setEditRoleColor] = useState('#7dd3fc');
-  const [editRolePermissions, setEditRolePermissions] = useState([]);
-  const [editRoleBadge, setEditRoleBadge] = useState('spark');
   const [adminError, setAdminError] = useState('');
   const [adminSaving, setAdminSaving] = useState(false);
+  const [memberQuery, setMemberQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+  const [moderationProfiles, setModerationProfiles] = useState({});
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const rolePermissions = ROLE_PERMISSION_OPTIONS;
   const [draggedChannelId, setDraggedChannelId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const dragGhostRef = useRef(null);
+  const moderationRequests = useRef(new Set());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  // Banned and timed-out people are usually no longer members, so their
+  // profiles are fetched separately for the moderation tab.
+  useEffect(() => {
+    if (!community) return undefined;
+    const uids = [...new Set([
+      ...Object.keys(community.bannedUsers || {}),
+      ...Object.keys(community.timedOutUsers || {})
+    ])];
+    const missing = uids.filter(uid => !moderationRequests.current.has(uid));
+    if (!missing.length) return undefined;
+    missing.forEach(uid => moderationRequests.current.add(uid));
+    let cancelled = false;
+    Promise.all(missing.map(async uid => [uid, await getUserProfile(uid).catch(() => null)]))
+      .then(entries => {
+        if (cancelled) return;
+        setModerationProfiles(previous => ({
+          ...previous,
+          ...Object.fromEntries(entries.filter(([, profile]) => profile))
+        }));
+      });
+    return () => { cancelled = true; };
+  }, [community]);
 
   const isOwner = community?.adminUid === currentUser?.uid;
   const canManageChannels = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_channels');
@@ -109,13 +158,6 @@ export default function CommunitySettings() {
   const canManageMembers = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_members');
   const canManageCommunity = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_community');
   const canManageInvites = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_invites');
-  const allowedTabs = [
-    ...(canManageCommunity || canManageInvites ? ['general'] : []),
-    ...(canManageChannels ? ['channels'] : []),
-    ...(canManageMembers ? ['members'] : []),
-    ...(canManageRoles ? ['roles'] : [])
-  ];
-  const visibleTab = allowedTabs.includes(activeTab) ? activeTab : allowedTabs[0];
 
   const [modalType, setModalType] = useState(null); // 'kick', 'ban', 'deleteChannel', 'timeout'
   const [selectedTarget, setSelectedTarget] = useState(null);
@@ -160,7 +202,7 @@ export default function CommunitySettings() {
     return () => { cancelled = true; };
   }, [communityId, currentUser?.uid]);
 
-  const handleIconChange = async (e) => {
+  const handleIconChange = async e => {
     const file = e.target.files[0];
     if (file) {
       try {
@@ -176,7 +218,7 @@ export default function CommunitySettings() {
     }
   };
 
-  const handleZoomChange = async (newZoom) => {
+  const handleZoomChange = async newZoom => {
     setZoom(newZoom);
     if (originalFile) {
       try {
@@ -188,9 +230,10 @@ export default function CommunitySettings() {
     }
   };
 
-  const handleSaveGeneral = async (e) => {
+  const handleSaveGeneral = async e => {
     e.preventDefault();
     setSaving(true);
+    setAdminError('');
     try {
       const updateData = {};
       if (canManageCommunity) Object.assign(updateData, {
@@ -214,26 +257,90 @@ export default function CommunitySettings() {
     setSaving(false);
   };
 
-  const handleAddChannel = async (e) => {
-    e.preventDefault();
-    if (!newChannelName.trim()) return;
+  const handleCopyInvite = async () => {
+    if (typeof window === 'undefined') return;
+    try {
+      await navigator.clipboard.writeText(inviteLinkFor({ origin: window.location.origin, communityId, community }));
+      setCopiedInvite(true);
+      window.setTimeout(() => setCopiedInvite(false), 2000);
+    } catch {
+      setAdminError('Could not copy the invite link.');
+    }
+  };
+
+  // Channels are created and edited in a dialog; this opens it with either a
+  // blank draft (create) or the channel's current settings (edit).
+  const openChannelDraft = channel => {
+    setChannelDraft(channel
+      ? {
+        id: channel.id,
+        name: channel.name || '',
+        type: channel.type || 'text',
+        originalType: channel.type || 'text',
+        isLocked: Boolean(channel.isLocked),
+        slowModeSeconds: Number(channel.slowModeSeconds) || 0,
+        allowedRoles: channel.allowedRoles || [],
+        joinMode: voiceJoinMode(channel),
+        joinRoles: channel.joinRoles || [],
+        inviteRoles: channel.inviteRoles || [],
+        invitedUids: channel.invitedUids || {},
+        clearHistory: false
+      }
+      : { id: null, name: '', type: 'text', originalType: 'text', isLocked: false, slowModeSeconds: 0, allowedRoles: [], joinMode: 'everyone', joinRoles: [], inviteRoles: [], invitedUids: {}, clearHistory: false });
+    setChannelEditorOpen(true);
+  };
+
+  const applyChannelType = nextType => setChannelDraft(previous => ({
+    ...previous,
+    type: nextType,
+    slowModeSeconds: nextType === 'voice' ? 0 : previous.slowModeSeconds,
+    clearHistory: nextType === 'voice' && Boolean(previous.id) && previous.originalType !== 'voice'
+  }));
+
+  // Converting text to voice wipes the history on save, so warn first and
+  // leave the draft on text until the change is confirmed.
+  const requestChannelTypeChange = nextType => {
+    if (!channelDraft || nextType === channelDraft.type) return;
+    if (nextType === 'voice' && channelDraft.id && channelDraft.originalType !== 'voice') {
+      setChannelEditorOpen(false);
+      setTypeWarningOpen(true);
+      return;
+    }
+    applyChannelType(nextType);
+  };
+
+  const handleSaveChannelDraft = async () => {
+    if (!channelDraft) return;
+    const trimmedName = channelDraft.name.trim();
+    if (!trimmedName) { setAdminError('Give the channel a name first.'); return; }
     setAdminSaving(true);
     setAdminError('');
+    const isVoice = channelDraft.type === 'voice';
+    const patch = {
+      name: trimmedName,
+      type: channelDraft.type,
+      slowModeSeconds: isVoice ? 0 : (Number(channelDraft.slowModeSeconds) || 0),
+      isLocked: Boolean(channelDraft.isLocked),
+      allowedRoles: channelDraft.allowedRoles
+    };
+    if (isVoice) {
+      patch.joinMode = channelDraft.joinMode;
+      patch.joinRoles = channelDraft.joinMode === 'roles' ? channelDraft.joinRoles : [];
+      patch.inviteRoles = channelDraft.joinMode === 'invite' ? channelDraft.inviteRoles : [];
+      patch.invitedUids = channelDraft.invitedUids || {};
+    }
     try {
-      await createChannel(communityId, newChannelName, newChannelType, {
-        isLocked: newChannelLocked,
-        slowModeSeconds: newChannelSlowMode,
-        allowedRoles: newAllowedRoles
-      });
-      setNewChannelName('');
-      setNewChannelType('text');
-      setNewChannelLocked(false);
-      setNewChannelSlowMode(0);
-      setNewAllowedRoles([]);
-      const chans = await getChannels(communityId);
-      setChannels(chans);
-    } catch (err) {
-      setAdminError(err.message || 'Could not create channel.');
+      if (channelDraft.id) {
+        await updateChannel(channelDraft.id, patch);
+        if (channelDraft.clearHistory) await clearChannelMessages(channelDraft.id);
+        setChannels(previous => previous.map(item => item.id === channelDraft.id ? { ...item, ...patch } : item));
+      } else {
+        await createChannel(communityId, trimmedName, channelDraft.type, patch);
+        setChannels(await getChannels(communityId));
+      }
+      setChannelEditorOpen(false);
+    } catch (error) {
+      setAdminError(error.message || 'Could not save that channel.');
     } finally {
       setAdminSaving(false);
     }
@@ -244,17 +351,6 @@ export default function CommunitySettings() {
     if (!allowedRoles.length) { setAdminError('Create a moderator role with Manage messages first.'); return; }
     await createChannel(communityId, 'announcements', 'text', { isLocked: true, allowedRoles });
     setChannels(await getChannels(communityId));
-  };
-
-  const handleRenameChannel = async (id) => {
-    if (!editChannelName.trim()) return;
-    try {
-      await updateChannel(id, { name: editChannelName });
-      setChannels(channels.map(c => c.id === id ? { ...c, name: editChannelName } : c));
-      setEditingChannel(null);
-    } catch (err) {
-      console.error(err);
-    }
   };
 
   const confirmDeleteChannel = async () => {
@@ -286,15 +382,6 @@ export default function CommunitySettings() {
       setBanDuration('-1');
     } catch (err) {
       console.error(err);
-    }
-  };
-
-  const handleChannelPolicyChange = async (channel, patch) => {
-    try {
-      await updateChannel(channel.id, patch);
-      setChannels(previous => previous.map(item => item.id === channel.id ? { ...item, ...patch } : item));
-    } catch (err) {
-      setAdminError(err.message || 'Could not update channel.');
     }
   };
 
@@ -399,53 +486,67 @@ export default function CommunitySettings() {
     }
   };
 
-  const handleCreateRole = async event => {
-    event.preventDefault();
-    const trimmedName = newRoleName.trim();
-    if (!trimmedName) return;
-    setAdminSaving(true);
+  const handleClearTimeout = async uid => {
     setAdminError('');
     try {
-      const baseId = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'role';
-      const roles = { ...(community.roles || {}) };
-      let roleId = baseId;
-      let suffix = 2;
-      while (roles[roleId]) roleId = `${baseId}-${suffix++}`;
-      roles[roleId] = { name: trimmedName, color: newRoleColor, badge: newRoleBadge, permissions: newRolePermissions };
-      const memberPermissions = buildMemberPermissions(roles, community.memberRoles || {});
-      await updateCommunity(communityId, { roles, memberPermissions });
-      setCommunity(previous => ({ ...previous, roles, memberPermissions }));
-      setNewRoleName('');
-      setNewRoleColor('#7dd3fc');
-      setNewRolePermissions([]);
+      await clearTimeoutUser(communityId, uid);
+      setCommunity(previous => ({
+        ...previous,
+        timedOutUsers: Object.fromEntries(Object.entries(previous.timedOutUsers || {}).filter(([memberUid]) => memberUid !== uid))
+      }));
     } catch (error) {
-      setAdminError(error.message || 'Could not create role.');
-    } finally {
-      setAdminSaving(false);
+      setAdminError(error.message || 'Could not clear that timeout.');
     }
   };
 
-  const beginRoleEdit = (roleId, role) => {
-    setEditingRoleId(roleId);
-    setEditRoleName(role.name || '');
-    setEditRoleColor(role.color || '#7dd3fc');
-    setEditRolePermissions(role.permissions || []); setEditRoleBadge(role.badge || 'spark');
+  const handleUnban = async uid => {
+    setAdminError('');
+    try {
+      await unbanUser(communityId, uid);
+      setCommunity(previous => ({
+        ...previous,
+        bannedUsers: Object.fromEntries(Object.entries(previous.bannedUsers || {}).filter(([memberUid]) => memberUid !== uid))
+      }));
+    } catch (error) {
+      setAdminError(error.message || 'Could not lift that ban.');
+    }
   };
 
-  const handleSaveRole = async roleId => {
-    const trimmedName = editRoleName.trim();
-    if (!trimmedName) return;
+  const openRoleDraft = (roleId, role) => {
+    setRoleDraft(role
+      ? {
+        id: roleId,
+        name: role.name || '',
+        color: role.color || '#7dd3fc',
+        badge: role.badge || 'spark',
+        permissions: role.permissions || []
+      }
+      : { id: null, name: '', color: '#7dd3fc', badge: 'spark', permissions: [] });
+    setRoleEditorOpen(true);
+  };
+
+  const handleSaveRoleDraft = async () => {
+    if (!roleDraft) return;
+    const trimmedName = roleDraft.name.trim();
+    if (!trimmedName) { setAdminError('Give the role a name first.'); return; }
     setAdminSaving(true);
     setAdminError('');
     try {
       const roles = { ...(community.roles || {}) };
-      roles[roleId] = { ...roles[roleId], name: trimmedName, color: editRoleColor, badge: editRoleBadge, permissions: editRolePermissions };
+      let roleId = roleDraft.id;
+      if (!roleId) {
+        const baseId = trimmedName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'role';
+        roleId = baseId;
+        let suffix = 2;
+        while (roles[roleId]) roleId = `${baseId}-${suffix++}`;
+      }
+      roles[roleId] = { ...(roles[roleId] || {}), name: trimmedName, color: roleDraft.color, badge: roleDraft.badge, permissions: roleDraft.permissions };
       const memberPermissions = buildMemberPermissions(roles, community.memberRoles || {});
       await updateCommunity(communityId, { roles, memberPermissions });
       setCommunity(previous => ({ ...previous, roles, memberPermissions }));
-      setEditingRoleId(null);
+      setRoleEditorOpen(false);
     } catch (error) {
-      setAdminError(error.message || 'Could not save role.');
+      setAdminError(error.message || 'Could not save that role.');
     } finally {
       setAdminSaving(false);
     }
@@ -474,287 +575,333 @@ export default function CommunitySettings() {
   if (loading) return <div className={styles.loading}>Loading settings...</div>;
   if (!community) return <div className={styles.loading}><p>{adminError || 'Community settings are unavailable.'}</p><button className={styles.backBtn} onClick={() => navigate(-1)}>Go back</button></div>;
 
-  const roleEntries = Object.entries(community?.roles || {});
-  const roleLabelFor = uid => {
-    const roleNames = roleIdsFor(uid).map(roleId => community?.roles?.[roleId]?.name).filter(Boolean);
-    return roleNames.length ? roleNames.join(', ') : 'No role assigned';
-  };
-
+  const roleEntries = Object.entries(community.roles || {});
   const allowedRoleNames = roleIds => {
-    const names = (roleIds || []).map(roleId => community?.roles?.[roleId]?.name).filter(Boolean);
+    const names = (roleIds || []).map(roleId => community.roles?.[roleId]?.name).filter(Boolean);
     return names.length ? names.join(', ') : 'Everyone';
   };
+
+  const bannedEntries = Object.entries(community.bannedUsers || {})
+    .map(([uid, until]) => ({ uid, until: Number(until) }))
+    .filter(entry => entry.until === -1 || entry.until > now)
+    .sort((first, second) => (first.until === -1 ? 1 : 0) - (second.until === -1 ? 1 : 0));
+  const timedOutEntries = Object.entries(community.timedOutUsers || {})
+    .map(([uid, until]) => ({ uid, until: Number(until) }))
+    .filter(entry => entry.until > now);
+
+  const tabs = [
+    { id: 'general', label: 'General', icon: 'tune', visible: canManageCommunity || canManageInvites },
+    { id: 'channels', label: 'Channels', icon: 'tag', visible: canManageChannels, count: channels.length },
+    { id: 'roles', label: 'Roles', icon: 'shield_person', visible: canManageRoles, count: roleEntries.length },
+    { id: 'members', label: 'Members', icon: 'group', visible: canManageMembers, count: members.length },
+    { id: 'moderation', label: 'Moderation', icon: 'gavel', visible: canManageMembers, count: bannedEntries.length + timedOutEntries.length }
+  ].filter(tab => tab.visible);
+  const allowedTabs = tabs.map(tab => tab.id);
+  const visibleTab = allowedTabs.includes(activeTab) ? activeTab : allowedTabs[0];
+
+  // Reached by a direct URL from someone without any moderator permission:
+  // an empty settings shell would be worse than a clear explanation.
+  if (!allowedTabs.length) {
+    return (
+      <div className={styles.loading}>
+        <div>
+          <p>You need a moderator permission in this community to open its settings.</p>
+          <button type="button" className={styles.backBtn} onClick={() => navigate(`/channels/${communityId}`)}>Back to chat</button>
+        </div>
+      </div>
+    );
+  }
+
+  const filteredMembers = members.filter(member => {
+    const query = memberQuery.trim().toLowerCase();
+    if (query && !(member.displayName || '').toLowerCase().includes(query) && !member.uid.toLowerCase().includes(query)) return false;
+    if (roleFilter === 'none') return roleIdsFor(member.uid).length === 0;
+    if (roleFilter !== 'all') return roleIdsFor(member.uid).includes(roleFilter);
+    return true;
+  });
+
+  const profileFor = uid => moderationProfiles[uid] || members.find(member => member.uid === uid) || null;
+
+  const renderAdminAlert = () => adminError ? (
+    <div className={styles.adminAlert} role="alert">
+      <span className="material-symbols-outlined">error</span>
+      <span>{adminError}</span>
+      <button type="button" onClick={() => setAdminError('')} aria-label="Dismiss error"><span className="material-symbols-outlined">close</span></button>
+    </div>
+  ) : null;
 
   return (
     <div className={styles.layout}>
       <aside className={styles.sidebar}>
         <div className={styles.sidebarHeader}>
-          <h2 className="text-label-md">COMMUNITY SETTINGS</h2>
-          <p className="text-label-sm text-tertiary">{community?.name}</p>
+          <span className={styles.sidebarEyebrow}>COMMUNITY SETTINGS</span>
+          <h2>{community.name}</h2>
+          <span className={styles.sidebarMeta}>{members.length} {members.length === 1 ? 'member' : 'members'} · {channels.length} {channels.length === 1 ? 'channel' : 'channels'}</span>
         </div>
-        <nav className={styles.nav}>
-          {canManageCommunity || canManageInvites ? <button
-            className={`${styles.navItem} ${visibleTab === 'general' ? styles.active : ''}`}
-            onClick={() => setActiveTab('general')}
-          >
-            <span className="material-symbols-outlined">settings</span>
-            General
-          </button> : null}
-          {canManageChannels && <button
-            className={`${styles.navItem} ${visibleTab === 'channels' ? styles.active : ''}`}
-            onClick={() => setActiveTab('channels')}
-          >
-            <span className="material-symbols-outlined">tag</span>
-            Channels
-          </button>}
-          {canManageMembers && <button
-            className={`${styles.navItem} ${visibleTab === 'members' ? styles.active : ''}`}
-            onClick={() => setActiveTab('members')}
-          >
-            <span className="material-symbols-outlined">group</span>
-            Members
-          </button>}
-          {canManageRoles && <button
-            className={`${styles.navItem} ${visibleTab === 'roles' ? styles.active : ''}`}
-            onClick={() => setActiveTab('roles')}
-          >
-            <span className="material-symbols-outlined">badge</span>
-            Roles
-          </button>}
-          <div className={styles.divider}></div>
-          <button className={styles.navItem} onClick={() => navigate(-1)}>
+        <nav className={styles.nav} aria-label="Settings sections">
+          <span className={styles.navLabel}>MANAGE</span>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`${styles.navItem} ${visibleTab === tab.id ? styles.active : ''}`}
+              onClick={() => { setActiveTab(tab.id); setAdminError(''); }}
+              aria-current={visibleTab === tab.id ? 'page' : undefined}
+            >
+              <span className="material-symbols-outlined">{tab.icon}</span>
+              {tab.label}
+              {typeof tab.count === 'number' && tab.count > 0 && <span className={styles.navCount}>{tab.count}</span>}
+            </button>
+          ))}
+          <div className={styles.divider} />
+          <button type="button" className={styles.navItem} onClick={() => navigate(`/channels/${communityId}`)}>
             <span className="material-symbols-outlined">arrow_back</span>
-            Back to Chat
+            Back to chat
           </button>
         </nav>
       </aside>
 
       <main className={styles.content}>
-        {visibleTab === 'general' && (            <div className={styles.tabContent}>
-            <h1 className="text-display-xl">Community Overview</h1>
-            {canManageCommunity && <div className={styles.themeRow}><ThemeSelect value={community?.theme || 'default'} onChange={themeId => setCommunityTheme(communityId, themeId).then(() => setCommunity(previous => ({ ...previous, theme: themeId })))} label="COMMUNITY THEME" /></div>}
+        {visibleTab === 'general' && (
+          <div className={styles.tabContent}>
+            <header className={styles.pageHeading}>
+              <div>
+                <p className={styles.eyebrow}>GENERAL</p>
+                <h1 className="text-headline-md">Community overview</h1>
+                <p className={styles.sectionDescription}>Your community&apos;s identity, theme, and the safety defaults that apply everywhere.</p>
+              </div>
+              <span className={styles.sectionCount}>{community.isPrivate ? 'Private community' : 'Public community'}</span>
+            </header>
+            {renderAdminAlert()}
+
             <form onSubmit={handleSaveGeneral} className={styles.form}>
-              <div className={styles.iconSection}>
-                <div className={styles.iconPreview}>
-                  {iconBase64 ? <img src={iconBase64} alt="Preview" /> : <div className={styles.iconPlaceholder}>?</div>}
-                  <label className={styles.iconUpload}>
-                    <span className="material-symbols-outlined">edit</span>
-                    <input type="file" onChange={handleIconChange} style={{ display: 'none' }} />
-                  </label>
-                </div>
-                <div className={styles.iconInfo}>
-                  <p className="text-label-md">Community Icon</p>
-                  <p className="text-label-sm text-tertiary">Recommended size: 512x512px</p>
-                  {originalFile && (
-                    <div className={styles.zoomControl}>
-                      <span className="material-symbols-outlined">zoom_out</span>
-                      <input 
-                        type="range" 
-                        min="1" 
-                        max="3" 
-                        step="0.1" 
-                        value={zoom} 
-                        onChange={(e) => handleZoomChange(e.target.value)} 
-                      />
-                      <span className="material-symbols-outlined">zoom_in</span>
+              {canManageCommunity && (
+                <section className={styles.card}>
+                  <h2 className={styles.cardTitle}><span className="material-symbols-outlined">badge</span>Identity</h2>
+                  <div className={styles.iconSection}>
+                    <div className={styles.iconPreview}>
+                      {iconBase64 ? <img src={iconBase64} alt="Community icon preview" /> : <div className={styles.iconPlaceholder}>?</div>}
+                      <label className={styles.iconUpload} title="Upload a community icon">
+                        <span className="material-symbols-outlined">edit</span>
+                        <input type="file" accept="image/*" onChange={handleIconChange} style={{ display: 'none' }} />
+                      </label>
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className={styles.iconInfo}>
+                      <p className="text-label-md">Community icon</p>
+                      <p className="text-label-sm text-tertiary">Square image, 512×512 recommended.</p>
+                      {originalFile && (
+                        <div className={styles.zoomControl}>
+                          <span className="material-symbols-outlined">zoom_out</span>
+                          <input
+                            type="range"
+                            min="1"
+                            max="3"
+                            step="0.1"
+                            value={zoom}
+                            aria-label="Icon zoom"
+                            onChange={e => handleZoomChange(e.target.value)}
+                          />
+                          <span className="material-symbols-outlined">zoom_in</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-              <div className={styles.inputGroup}>
-                <label className="text-label-md">COMMUNITY NAME</label>
-                <input type="text" value={name} onChange={e => setName(e.target.value)} />
-              </div>
-
-              <div className={styles.inputGroup}>
-                <label className="text-label-md">DESCRIPTION</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} />
-              </div>
+                  <div className={styles.fieldGrid}>
+                    <label className={styles.inputGroup}>
+                      <span>COMMUNITY NAME</span>
+                      <input type="text" value={name} maxLength={60} onChange={e => setName(e.target.value)} />
+                    </label>
+                    <label className={`${styles.inputGroup}`}>
+                      <span>DESCRIPTION</span>
+                      <textarea value={description} maxLength={300} onChange={e => setDescription(e.target.value)} rows={3} placeholder="What is this community about?" />
+                    </label>
+                  </div>
+                </section>
+              )}
 
               {canManageCommunity && (
-                <>
-                  <div className={styles.inputGroup} style={{ marginTop: '1.5rem' }}>
-                    <label className="text-label-md">AUTO-MOD</label>
-                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModProfanity} onChange={e => setAutoModProfanity(e.target.checked)} /> Block profanity</label>
-                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModLinks} onChange={e => setAutoModLinks(e.target.checked)} /> Block links</label>
-                    <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>Messages that violate these filters are blocked from being sent.</p>
-                  </div>
-                  <div className={styles.inputGroup} style={{ marginTop: '1rem' }}>
-                    <label className="text-label-md">SYSTEM MESSAGES</label>
-                    <label className={styles.policyToggle}><input type="checkbox" checked={systemJoinEnabled} onChange={e => setSystemJoinEnabled(e.target.checked)} /> Show when members join</label>
-                    <label className={styles.policyToggle}><input type="checkbox" checked={systemLeaveEnabled} onChange={e => setSystemLeaveEnabled(e.target.checked)} /> Show when members leave</label>
-                    <label className="text-label-sm" style={{ marginTop: '0.5rem' }}>CHANNEL FOR SYSTEM MESSAGES</label>
-                    <Dropdown value={systemChannelId} onChange={setSystemChannelId} options={[{ value: '', label: 'None' }, ...channels.filter(channel => channel.type !== 'voice').map(channel => ({ value: channel.id, label: `#${channel.name}` }))]} />
-                    <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>Joined/left activity is posted to this channel when enabled.</p>
-                  </div>
-                </>
+                <section className={styles.card}>
+                  <h2 className={styles.cardTitle}><span className="material-symbols-outlined">palette</span>Appearance</h2>
+                  <ThemeSelect
+                    value={community.theme || 'default'}
+                    label="COMMUNITY THEME"
+                    onChange={themeId => setCommunityTheme(communityId, themeId).then(() => setCommunity(previous => ({ ...previous, theme: themeId })))}
+                  />
+                  <p className={styles.cardHint}>The theme recolours the community&apos;s chat, sidebar and accents for every member.</p>
+                </section>
               )}
 
-              {canManageInvites && community?.isPrivate && (
-                <div className={styles.inputGroup}>
-                  <label className="text-label-md">INVITE CODE</label>
-                  <div style={{ display: 'flex', gap: '1rem' }}>
-                    <input 
-                      type="text" 
-                      value={inviteCode} 
-                      onChange={e => setInviteCode(e.target.value.toUpperCase())} 
-                      placeholder="e.g. BLINK123"
-                    />
-                    <button 
-                      type="button" 
-                      className={styles.secondaryBtn}
-                      onClick={() => setInviteCode(Math.random().toString(36).substring(2, 10).toUpperCase())}
-                    >
-                      Regenerate
-                    </button>
+              {canManageCommunity && (
+                <section className={styles.card}>
+                  <h2 className={styles.cardTitle}><span className="material-symbols-outlined">shield</span>Safety</h2>
+                  <div className={styles.toggleRow}>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModProfanity} onChange={e => setAutoModProfanity(e.target.checked)} />Block profanity</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={autoModLinks} onChange={e => setAutoModLinks(e.target.checked)} />Block links</label>
                   </div>
-                  <p className="text-label-sm text-tertiary" style={{ marginTop: '0.5rem' }}>
-                    This code is required for users to join your private community.
-                  </p>
-                </div>
+                  <p className={styles.cardHint}>Messages that trip these filters are refused before they are sent.</p>
+                </section>
               )}
 
-              <button type="submit" className={styles.saveBtn} disabled={saving || (!canManageCommunity && !canManageInvites)}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
+              {canManageCommunity && (
+                <section className={styles.card}>
+                  <h2 className={styles.cardTitle}><span className="material-symbols-outlined">campaign</span>Activity feed</h2>
+                  <div className={styles.toggleRow}>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={systemJoinEnabled} onChange={e => setSystemJoinEnabled(e.target.checked)} />Announce joins</label>
+                    <label className={styles.policyToggle}><input type="checkbox" checked={systemLeaveEnabled} onChange={e => setSystemLeaveEnabled(e.target.checked)} />Announce leaves</label>
+                  </div>
+                  <div className={styles.fieldGrid}>
+                    <div className={styles.fieldGroup}>
+                      <span>POST TO CHANNEL</span>
+                      <Dropdown value={systemChannelId} onChange={setSystemChannelId} options={[{ value: '', label: 'None' }, ...channels.filter(channel => channel.type !== 'voice').map(channel => ({ value: channel.id, label: `#${channel.name}` }))]} />
+                    </div>
+                  </div>
+                  <p className={styles.cardHint}>Join and leave notes are posted to the selected channel while announcements are enabled.</p>
+                </section>
+              )}
+
+              {canManageInvites && (
+                <section className={styles.card}>
+                  <h2 className={styles.cardTitle}><span className="material-symbols-outlined">key</span>Invite access</h2>
+                  {community.isPrivate && (
+                    <div className={styles.fieldGrid}>
+                      <label className={styles.inputGroup}>
+                        <span>INVITE CODE</span>
+                        <input type="text" value={inviteCode} onChange={e => setInviteCode(e.target.value.toUpperCase())} placeholder="e.g. BLINK123" />
+                      </label>
+                    </div>
+                  )}
+                  <div className={styles.saveBar}>
+                    <span className={styles.saveBarHint}>{community.isPrivate ? 'Invite links carry this code, so members you trust join without typing it.' : 'Anyone with this link can join the community.'}</span>
+                    <div className={styles.channelActions}>
+                      {community.isPrivate && <button type="button" className={styles.secondaryAction} onClick={() => setInviteCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>Regenerate code</button>}
+                      <button type="button" className={styles.secondaryAction} onClick={handleCopyInvite}>{copiedInvite ? 'Copied' : 'Copy invite link'}</button>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <div className={styles.saveBar}>
+                <span className={styles.saveBarHint}>Changes apply to everyone in {community.name}.</span>
+                <button type="submit" className={styles.saveBtn} disabled={saving || (!canManageCommunity && !canManageInvites)}>
+                  {saving ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
             </form>
           </div>
         )}
 
         {visibleTab === 'channels' && (
           <div className={styles.tabContent}>
-            {adminError && <div className={styles.adminAlert} role="alert"><span className="material-symbols-outlined">error</span><span>{adminError}</span><button type="button" onClick={() => setAdminError('')} aria-label="Dismiss error"><span className="material-symbols-outlined">close</span></button></div>}
-            <div className={styles.pageHeading}>
+            <header className={styles.pageHeading}>
               <div>
                 <p className={styles.eyebrow}>COMMUNITY STRUCTURE</p>
-                <h1 className="text-display-xl">Manage Channels</h1>
-                <p className={styles.sectionDescription}>Create focused spaces for conversation and control which roles can access them.</p>
+                <h1 className="text-headline-md">Channels</h1>
+                <p className={styles.sectionDescription}>Create spaces for conversation, control who can post in them, and set the pace.</p>
               </div>
-              <span className={styles.sectionCount}>{channels.length} {channels.length === 1 ? 'channel' : 'channels'}</span>
-            </div>
-            <form onSubmit={handleAddChannel} className={styles.addChannelForm}>
-              <div className={styles.formHeading}><svg className={styles.formHeadingIcon} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg><div><strong>Create a channel</strong><span>Set its type and access policy before adding it.</span></div></div>
-              <input
-                type="text"
-                placeholder="New channel name..."
-                value={newChannelName}
-                onChange={e => setNewChannelName(e.target.value)}
-              />
-              <Dropdown value={newChannelType} onChange={setNewChannelType} options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]} />
-              <label className={styles.policyToggle}>
-                <input type="checkbox" checked={newChannelLocked} onChange={e => setNewChannelLocked(e.target.checked)} />
-                Locked
-              </label>
-              <Dropdown value={newChannelSlowMode} onChange={value => setNewChannelSlowMode(Number(value))} options={SLOW_MODE_OPTIONS.map(option => ({ value: option.seconds, label: `Slow mode: ${option.label}` }))} />
-              <div className={styles.channelRolePicker} aria-label="Allowed roles for new channel">
-                      <span className={styles.pickerLabel}>ACCESS</span>
-                      <div className={styles.roleCheckboxes}>
-                        {roleEntries.map(([roleId, role]) => <label className={`${styles.roleCheckbox} ${newAllowedRoles.includes(roleId) ? styles.checked : ''}`} key={roleId}><input type="checkbox" checked={newAllowedRoles.includes(roleId)} onChange={event => setNewAllowedRoles(previous => event.target.checked ? [...new Set([...previous, roleId])] : previous.filter(id => id !== roleId))} /><span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span></label>)}
-                        {!roleEntries.length && <span className={styles.noRoles}>Everyone</span>}
-                      </div>
-                      <small>{allowedRoleNames(newAllowedRoles)}</small>
-                    </div>
-              <button type="submit" disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'add'}</span>{adminSaving ? 'Adding...' : 'Add channel'}</button>
-            </form>
-            <button type="button" className={styles.secondaryAction} onClick={handleAddAnnouncement}>Add announcement channel preset</button>
+              <div className={styles.headingActions}>
+                <span className={styles.sectionCount}>{channels.length} {channels.length === 1 ? 'channel' : 'channels'}</span>
+                <button type="button" className={styles.secondaryAction} onClick={handleAddAnnouncement}>Announcement preset</button>
+                <button type="button" className={styles.primaryAction} onClick={() => openChannelDraft()}>
+                  <span className="material-symbols-outlined">add</span>
+                  New channel
+                </button>
+              </div>
+            </header>
+            {renderAdminAlert()}
 
             <div className={styles.channelList}>
-              {channels.map(chan => (
-                <div key={chan.id} className={`${styles.channelItem} ${draggedChannelId === chan.id ? styles.dragging : ''} ${dropTarget?.id === chan.id ? (dropTarget.before ? styles.dropBefore : styles.dropAfter) : ''}`} draggable={canManageChannels} onDragStart={event => handleChannelDragStart(event, chan.id)} onDragOver={event => handleChannelDragOver(event, chan.id)} onDrop={handleChannelDrop} onDragEnd={handleChannelDragEnd} onDragLeave={() => setDropTarget(previous => previous?.id === chan.id ? null : previous)}>
-                  <div className={styles.channelInfo}>
-                    <span className="material-symbols-outlined">{chan.type === 'voice' ? 'graphic_eq' : 'tag'}</span>
-                    {editingChannel === chan.id ? (
-                      <input 
-                        type="text" 
-                        value={editChannelName} 
-                        onChange={e => setEditChannelName(e.target.value)}
-                        onBlur={() => handleRenameChannel(chan.id)}
-                        onKeyDown={e => e.key === 'Enter' && handleRenameChannel(chan.id)}
-                        autoFocus
-                        className={styles.editChannelInput}
-                      />
-                    ) : (
-                      <p className="text-body-md">{chan.name}</p>
-                    )}
-                  </div>
-                  <div className={styles.channelActions}>
-                    {canManageChannels && <div className={styles.reorderActions}>
-                      <button type="button" className={styles.actionBtn} onClick={() => moveChannel(channels.indexOf(chan), -1)} disabled={channels.indexOf(chan) === 0} title="Move channel up"><span className="material-symbols-outlined">arrow_upward</span></button>
-                      <button type="button" className={styles.actionBtn} onClick={() => moveChannel(channels.indexOf(chan), 1)} disabled={channels.indexOf(chan) === channels.length - 1} title="Move channel down"><span className="material-symbols-outlined">arrow_downward</span></button>
-                    </div>}
-                    <label className={styles.policyToggle}>
-                      <input type="checkbox" checked={Boolean(chan.isLocked)} onChange={e => handleChannelPolicyChange(chan, { isLocked: e.target.checked })} />
-                      Locked
-                    </label>
-                    <Dropdown value={Number(chan.slowModeSeconds) || 0} onChange={value => handleChannelPolicyChange(chan, { slowModeSeconds: Number(value) })} options={SLOW_MODE_OPTIONS.map(option => ({ value: option.seconds, label: option.label }))} />
-                    <div className={styles.channelRolePicker} aria-label={`Allowed roles for ${chan.name}`}>
-                      <span className={styles.pickerLabel}>ACCESS</span>
-                      <div className={styles.roleCheckboxes}>
-                        {roleEntries.map(([roleId, role]) => <label className={`${styles.roleCheckbox} ${(chan.allowedRoles || []).includes(roleId) ? styles.checked : ''}`} key={roleId}><input type="checkbox" checked={(chan.allowedRoles || []).includes(roleId)} onChange={event => handleChannelPolicyChange(chan, { allowedRoles: event.target.checked ? [...new Set([...(chan.allowedRoles || []), roleId])] : (chan.allowedRoles || []).filter(id => id !== roleId) })} /><span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span></label>)}
-                        {!roleEntries.length && <span className={styles.noRoles}>Everyone</span>}
+              {channels.length === 0 && <p className={styles.emptyState}>No channels yet. Create one so members have somewhere to talk.</p>}
+              {channels.map(chan => {
+                const locked = Boolean(chan.isLocked);
+                const slowMode = Number(chan.slowModeSeconds) || 0;
+                const accessLabel = allowedRoleNames(chan.allowedRoles);
+                return (
+                  <article
+                    key={chan.id}
+                    className={`${styles.channelItem} ${draggedChannelId === chan.id ? styles.dragging : ''} ${dropTarget?.id === chan.id ? (dropTarget.before ? styles.dropBefore : styles.dropAfter) : ''}`}
+                    draggable={canManageChannels}
+                    onDragStart={event => handleChannelDragStart(event, chan.id)}
+                    onDragOver={event => handleChannelDragOver(event, chan.id)}
+                    onDrop={handleChannelDrop}
+                    onDragEnd={handleChannelDragEnd}
+                    onDragLeave={() => setDropTarget(previous => previous?.id === chan.id ? null : previous)}
+                  >
+                    <div className={styles.channelTop}>
+                      <div className={styles.channelInfo}>
+                        <span className="material-symbols-outlined" aria-hidden="true">{chan.type === 'voice' ? 'graphic_eq' : 'tag'}</span>
+                        <p>{chan.name}</p>
                       </div>
-                      <small>{allowedRoleNames(chan.allowedRoles)}</small>
-                    </div>                      <button type="button" className={styles.actionBtn} onClick={() => {
-                      setEditingChannel(chan.id);
-                      setEditChannelName(chan.name);
-                    }} title="Rename channel">
-                      <span className="material-symbols-outlined" style={{ color: 'var(--color-primary)' }}>edit</span>
-                    </button>
-                    <button type="button" className={styles.actionBtn} onClick={() => {
-                      setSelectedTarget(chan.id);
-                      setModalType('deleteChannel');
-                    }} title="Delete channel">
-                      <span className="material-symbols-outlined">delete</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
+                      <div className={styles.channelMeta}>
+                        <span className={styles.badge}>{chan.type === 'voice' ? 'Voice' : 'Text'}</span>
+                        {chan.type === 'voice'
+                          ? <span className={styles.badge}>
+                            {voiceJoinMode(chan) === 'roles'
+                              ? `Only ${allowedRoleNames(chan.joinRoles)}`
+                              : voiceJoinMode(chan) === 'invite' ? 'Invite only' : 'Anyone can join'}
+                          </span>
+                          : <>
+                            <span className={`${styles.badge} ${locked ? styles.warn : ''}`}>{locked ? 'Locked' : 'Open'}</span>
+                            {slowMode > 0 && <span className={styles.badge}>Slow: {SLOW_MODE_OPTIONS.find(option => option.seconds === slowMode)?.label || `${slowMode}s`}</span>}
+                            <span className={styles.badge}>{accessLabel === 'Everyone' ? 'Everyone can post' : `Only ${accessLabel}`}</span>
+                          </>}
+                      </div>
+                      <div className={styles.reorderActions}>
+                        <button type="button" className={styles.actionBtn} onClick={() => moveChannel(channels.indexOf(chan), -1)} disabled={channels.indexOf(chan) === 0} title="Move channel up"><span className="material-symbols-outlined">arrow_upward</span></button>
+                        <button type="button" className={styles.actionBtn} onClick={() => moveChannel(channels.indexOf(chan), 1)} disabled={channels.indexOf(chan) === channels.length - 1} title="Move channel down"><span className="material-symbols-outlined">arrow_downward</span></button>
+                      </div>
+                      <div className={styles.channelActions}>
+                        <button type="button" className={styles.actionBtn} onClick={() => openChannelDraft(chan)} title="Edit channel"><span className="material-symbols-outlined">edit</span></button>
+                        <button type="button" className={`${styles.actionBtn} ${styles.dangerAction}`} onClick={() => { setSelectedTarget(chan.id); setModalType('deleteChannel'); }} title="Delete channel"><span className="material-symbols-outlined">delete</span></button>
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         )}
 
         {visibleTab === 'roles' && (
           <div className={styles.tabContent}>
-            <div className={styles.pageHeading}>
+            <header className={styles.pageHeading}>
               <div>
                 <p className={styles.eyebrow}>ACCESS CONTROL</p>
-                <h1 className="text-display-xl">Manage Roles</h1>
-                <p className={styles.sectionDescription}>Create roles for your community, choose what they can do, and assign them from the Members tab.</p>
+                <h1 className="text-headline-md">Roles</h1>
+                <p className={styles.sectionDescription}>Roles decide what members can do. Create them here and assign them from the Members tab.</p>
               </div>
-              <span className={styles.sectionCount}>{Object.keys(community?.roles || {}).length} roles</span>
-            </div>
-
-            {adminError && <div className={styles.adminAlert} role="alert"><span className="material-symbols-outlined">error</span><span>{adminError}</span><button type="button" onClick={() => setAdminError('')} aria-label="Dismiss error"><span className="material-symbols-outlined">close</span></button></div>}
-            <form onSubmit={handleCreateRole} className={styles.roleCreateForm}>
-              <div className={styles.formHeading}><svg className={styles.formHeadingIcon} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg><div><strong>Create a role</strong><span>Use a clear name members will recognize.</span></div></div>
-              <div className={styles.roleFormGrid}>
-                <label className={styles.fieldGroup}><span>ROLE NAME</span><input value={newRoleName} onChange={event => setNewRoleName(event.target.value)} placeholder="e.g. Event Host" maxLength={32} /></label>
-                <label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={newRoleColor} onChange={event => setNewRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><Dropdown value={newRoleBadge} onChange={setNewRoleBadge} options={ROLE_BADGE_PRESETS.map(badge => ({ value: badge, label: badge }))} /></label>
+              <div className={styles.headingActions}>
+                <span className={styles.sectionCount}>{roleEntries.length} {roleEntries.length === 1 ? 'role' : 'roles'}</span>
+                <button type="button" className={styles.primaryAction} onClick={() => openRoleDraft()}>
+                  <span className="material-symbols-outlined">add</span>
+                  New role
+                </button>
               </div>
-              <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={newRolePermissions.includes(permission.id)} onChange={event => setNewRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
-              <button type="submit" className={styles.primaryAction} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'add'}</span>{adminSaving ? 'Creating...' : 'Create role'}</button>
-            </form>
+            </header>
+            {renderAdminAlert()}
 
             <div className={styles.roleList}>
-              {Object.entries(community?.roles || {}).map(([roleId, role]) => (
+              {roleEntries.length === 0 && <p className={styles.emptyState}>No roles yet. A role is how you give someone moderator powers.</p>}
+              {roleEntries.map(([roleId, role]) => (
                 <article className={styles.roleCard} key={roleId}>
                   <div className={styles.roleCardHeader}>
-                    <div className={styles.roleIdentity}><span className={styles.roleSwatch} style={{ backgroundColor: role.color || '#7dd3fc' }} /><div><strong>{role.name}</strong><span>@{roleId}</span></div></div>
+                    <div className={styles.roleIdentity}>
+                      <span className={styles.roleSwatch} style={{ backgroundColor: role.color || '#7dd3fc' }} />
+                      <div><strong>{role.name}</strong><span>@{roleId}</span></div>
+                    </div>
                     <div className={styles.roleActions}>
-                      <button className={styles.actionBtn} onClick={() => beginRoleEdit(roleId, role)} title={`Edit ${role.name}`}><span className="material-symbols-outlined">edit</span></button>
+                      <button type="button" className={styles.actionBtn} onClick={() => openRoleDraft(roleId, role)} title={`Edit ${role.name}`}><span className="material-symbols-outlined">edit</span></button>
                       <button type="button" className={`${styles.actionBtn} ${styles.dangerAction}`} onClick={() => handleDeleteRole(roleId)} title={`Delete ${role.name}`}><span className="material-symbols-outlined">delete</span></button>
                     </div>
                   </div>
-                  {editingRoleId === roleId ? (
-                    <div className={styles.roleEditor}>
-                      <div className={styles.roleFormGrid}><label className={styles.fieldGroup}><span>ROLE NAME</span><input value={editRoleName} onChange={event => setEditRoleName(event.target.value)} /></label><label className={styles.fieldGroup}><span>ROLE COLOR</span><input className={styles.colorInput} type="color" value={editRoleColor} onChange={event => setEditRoleColor(event.target.value)} /></label><label className={styles.fieldGroup}><span>BADGE ICON</span><Dropdown value={editRoleBadge} onChange={setEditRoleBadge} options={ROLE_BADGE_PRESETS.map(badge => ({ value: badge, label: badge }))} /></label></div>
-                      <fieldset className={styles.permissionsFieldset}><legend>PERMISSIONS</legend><div className={styles.permissionGrid}>{rolePermissions.map(permission => <label className={styles.permissionOption} key={permission.id}><input type="checkbox" checked={editRolePermissions.includes(permission.id)} onChange={event => setEditRolePermissions(previous => event.target.checked ? [...previous, permission.id] : previous.filter(id => id !== permission.id))} /><span>{permission.label}</span></label>)}</div></fieldset>
-                      <div className={styles.editorActions}><button type="button" className={styles.secondaryAction} onClick={() => setEditingRoleId(null)}>Cancel</button><button type="button" className={styles.primaryAction} onClick={() => handleSaveRole(roleId)} disabled={adminSaving}><span className="material-symbols-outlined">{adminSaving ? 'progress_activity' : 'save'}</span>{adminSaving ? 'Saving...' : 'Save role'}</button></div>
+                  <div className={styles.roleSummary}>
+                    <div className={styles.permissionChips}>
+                      {(role.permissions || []).length
+                        ? role.permissions.map(permission => <span key={permission}>{rolePermissions.find(option => option.id === permission)?.label || permission}</span>)
+                        : <span>No special permissions</span>}
                     </div>
-                  ) : (
-                    <div className={styles.roleSummary}><div className={styles.permissionChips}>{(role.permissions || []).length ? role.permissions.map(permission =>                        <span key={permission}>{rolePermissions.find(option => option.id === permission)?.label || permission}</span>) : <span>No special permissions</span>}</div><span className={styles.roleNote}>Custom role</span></div>
-                  )}
+                    <span className={styles.roleNote}>{members.filter(member => roleIdsFor(member.uid).includes(roleId)).length} assigned</span>
+                  </div>
                 </article>
               ))}
             </div>
@@ -763,121 +910,432 @@ export default function CommunitySettings() {
 
         {visibleTab === 'members' && (
           <div className={styles.tabContent}>
-            <h1 className="text-display-xl">Member List</h1>
-            <p className="text-body-md text-tertiary" style={{ marginBottom: '2rem' }}>{members.length} Members</p>
-            
+            <header className={styles.pageHeading}>
+              <div>
+                <p className={styles.eyebrow}>PEOPLE</p>
+                <h1 className="text-headline-md">Members</h1>
+                <p className={styles.sectionDescription}>Find someone quickly, change their roles, or step in when behaviour needs a timeout.</p>
+              </div>
+              <span className={styles.sectionCount}>{filteredMembers.length} of {members.length}</span>
+            </header>
+            {renderAdminAlert()}
+
+            <div className={styles.memberToolbar}>
+              <label className={styles.searchField}>
+                <span>SEARCH MEMBERS</span>
+                <input type="search" value={memberQuery} onChange={event => setMemberQuery(event.target.value)} placeholder="Name or user ID" />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>FILTER BY ROLE</span>
+                <select className={styles.filterSelect} value={roleFilter} onChange={event => setRoleFilter(event.target.value)}>
+                  <option value="all">All roles</option>
+                  {roleEntries.map(([roleId, role]) => <option key={roleId} value={roleId}>{role.name}</option>)}
+                  <option value="none">No role</option>
+                </select>
+              </label>
+            </div>
+
             <div className={styles.memberList}>
-              {members.map(member => (
-                <div key={member.uid} className={styles.memberItem}>
-                  <div className={styles.memberInfo}>
-                    <UserAvatar user={member} size="2.5rem" />
-                    <div>
-                      <p className="text-label-md">{member.displayName}</p>
-                      <p className="text-label-sm text-tertiary">
-                        {member.uid === community?.adminUid ? 'Owner' : roleLabelFor(member.uid)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className={styles.memberActions}>
-                    <div className={styles.memberRolePicker} aria-label={`Roles for ${member.displayName}`}>
-                      <span className={styles.pickerLabel}>ROLES</span>
-                      <div className={styles.roleCheckboxes}>
-                        {canManageRoles && roleEntries.map(([roleId, role]) => <label className={`${styles.roleCheckbox} ${roleIdsFor(member.uid).includes(roleId) ? styles.checked : ''}`} key={roleId}><input type="checkbox" checked={roleIdsFor(member.uid).includes(roleId)} onChange={() => handleRoleChange(member.uid, roleId)} /><span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span></label>)}
-                        {!roleEntries.length && <span className={styles.noRoles}>No roles created yet</span>}
-                        {roleEntries.length > 0 && !canManageRoles && <span className={styles.noRoles}>Role assignment requires role management permission</span>}
+              {filteredMembers.length === 0 && <p className={styles.emptyState}>No members match that search.</p>}
+              {filteredMembers.map(member => {
+                const isTimedOut = Number(community.timedOutUsers?.[member.uid]) > now;
+                const memberRoleIds = roleIdsFor(member.uid);
+                return (
+                  <div key={member.uid} className={styles.memberItem}>
+                    <div className={styles.memberInfo}>
+                      <UserAvatar user={member} size="2.5rem" />
+                      <div className={styles.memberName}>
+                        <p><strong>{member.displayName || 'Member'}</strong></p>
+                        <div className={styles.memberBadges}>
+                          {member.uid === community.adminUid
+                            ? <span className={styles.badge}>Owner</span>
+                            : memberRoleIds.length
+                              ? memberRoleIds.map(roleId => <span className={styles.badge} key={roleId}>{community.roles?.[roleId]?.name || roleId}</span>)
+                              : <span className={styles.badge}>No role</span>}
+                          {isTimedOut && <span className={`${styles.badge} ${styles.warn}`}>Timed out · {describeRemaining(Number(community.timedOutUsers[member.uid]) - now)}</span>}
+                        </div>
                       </div>
-                      <small>{roleLabelFor(member.uid)}</small>
                     </div>
-                    {member.uid !== community?.adminUid && (<>
-                      <button className={styles.kickBtn} onClick={() => {
-                        setSelectedTarget(member.uid);
-                        setModalType('kick');
-                      }}>Kick</button>
-                      <button className={styles.banBtn} onClick={() => {
-                        setSelectedTarget(member.uid);
-                        setModalType('ban');
-                      }}>Ban</button>
-                      <button className={styles.kickBtn} onClick={() => {
-                        setSelectedTarget(member.uid);
-                        setModalType('timeout');
-                      }}>Timeout</button>
-                    </>)}
+                    <div className={styles.memberActions}>
+                      {canManageRoles && roleEntries.length > 0 && (
+                        <div className={styles.memberRolePicker}>
+                          <span className={styles.pickerLabel}>ROLES</span>
+                          <div className={styles.roleCheckboxes}>
+                            {roleEntries.map(([roleId, role]) => (
+                              <label className={`${styles.roleCheckbox} ${memberRoleIds.includes(roleId) ? styles.checked : ''}`} key={roleId}>
+                                <input type="checkbox" checked={memberRoleIds.includes(roleId)} onChange={() => handleRoleChange(member.uid, roleId)} aria-label={`${role.name} for ${member.displayName}`} />
+                                <span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {member.uid !== community.adminUid && (
+                        <>
+                          <button type="button" className={styles.kickBtn} onClick={() => { setSelectedTarget(member.uid); setModalType('kick'); }}>Kick</button>
+                          <button type="button" className={styles.kickBtn} onClick={() => { setSelectedTarget(member.uid); setModalType('timeout'); }}>{isTimedOut ? 'Timeout again' : 'Timeout'}</button>
+                          {isTimedOut && <button type="button" className={styles.smallAction} onClick={() => handleClearTimeout(member.uid)}>Clear timeout</button>}
+                          <button type="button" className={styles.banBtn} onClick={() => { setSelectedTarget(member.uid); setModalType('ban'); }}>Ban</button>
+                        </>
+                      )}
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {visibleTab === 'moderation' && (
+          <div className={styles.tabContent}>
+            <header className={styles.pageHeading}>
+              <div>
+                <p className={styles.eyebrow}>MODERATION</p>
+                <h1 className="text-headline-md">Bans and timeouts</h1>
+                <p className={styles.sectionDescription}>Everyone you have removed or silenced, with the expiry and a way back.</p>
+              </div>
+              <span className={styles.sectionCount}>{bannedEntries.length} banned · {timedOutEntries.length} timed out</span>
+            </header>
+            {renderAdminAlert()}
+
+            <div className={styles.moderationGrid}>
+              <section className={styles.card}>
+                <h2 className={styles.cardTitle}><span className="material-symbols-outlined">block</span>Banned members</h2>
+                <p className={styles.cardHint}>A ban keeps someone out until it expires or you lift it.</p>
+                <div className={styles.memberList}>
+                  {bannedEntries.length === 0 && <p className={styles.emptyState}>Nobody is banned.</p>}
+                  {bannedEntries.map(({ uid, until }) => {
+                    const profile = profileFor(uid);
+                    return (
+                      <div className={styles.moderationRow} key={uid}>
+                        <UserAvatar user={profile || { displayName: 'Member' }} size="2rem" />
+                        <div className={styles.moderationRowInfo}>
+                          <strong>{profile?.displayName || 'Former member'}</strong>
+                          <span>{describeUntil(until)}</span>
+                        </div>
+                        <button type="button" className={styles.smallAction} onClick={() => handleUnban(uid)}>Unban</button>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              </section>
+
+              <section className={styles.card}>
+                <h2 className={styles.cardTitle}><span className="material-symbols-outlined">timer</span>Active timeouts</h2>
+                <p className={styles.cardHint}>Timed-out members can read but cannot post until the timer runs out.</p>
+                <div className={styles.memberList}>
+                  {timedOutEntries.length === 0 && <p className={styles.emptyState}>Nobody is timed out.</p>}
+                  {timedOutEntries.map(({ uid, until }) => {
+                    const profile = profileFor(uid);
+                    return (
+                      <div className={styles.moderationRow} key={uid}>
+                        <UserAvatar user={profile || { displayName: 'Member' }} size="2rem" />
+                        <div className={styles.moderationRowInfo}>
+                          <strong>{profile?.displayName || 'Member'}</strong>
+                          <span>{describeRemaining(until - now)} left</span>
+                        </div>
+                        <button type="button" className={styles.smallAction} onClick={() => handleClearTimeout(uid)}>Clear</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
           </div>
         )}
       </main>
 
-      {/* Custom Modals */}
-      <Modal 
-        isOpen={modalType === 'kick'} 
-        onClose={() => setModalType(null)}
-        title="Confirm Kick"
+      <Modal
+        isOpen={typeWarningOpen}
+        onClose={() => { setTypeWarningOpen(false); setChannelEditorOpen(true); }}
+        title="Convert to a voice channel?"
         footer={(
           <>
-            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
-            <button className={styles.modalConfirm} onClick={confirmKick}>Kick User</button>
+            <button className={styles.modalCancel} onClick={() => { setTypeWarningOpen(false); setChannelEditorOpen(true); }}>Keep as text</button>
+            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={() => { applyChannelType('voice'); setTypeWarningOpen(false); setChannelEditorOpen(true); }}>Convert to voice</button>
           </>
         )}
       >
-        <p className="text-body-md">Are you sure you want to kick this member? They will be able to rejoin with an invite link.</p>
+        <p className="text-body-md">All message history in this channel will be deleted when you save the change. Nothing is removed until then.</p>
       </Modal>
 
-      <Modal 
-        isOpen={modalType === 'deleteChannel'} 
-        onClose={() => setModalType(null)}
-        title="Delete Channel"
+      <Modal
+        isOpen={channelEditorOpen}
+        onClose={() => setChannelEditorOpen(false)}
+        title={channelDraft?.id ? 'Edit channel' : 'New channel'}
         footer={(
           <>
-            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
-            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={confirmDeleteChannel}>Delete</button>
+            <button className={styles.modalCancel} onClick={() => setChannelEditorOpen(false)}>Cancel</button>
+            <button className={styles.modalConfirm} onClick={handleSaveChannelDraft} disabled={adminSaving}>{adminSaving ? 'Saving...' : channelDraft?.id ? 'Save channel' : 'Create channel'}</button>
           </>
         )}
       >
-        <p className="text-body-md">This will permanently remove the channel and all its messages. This action cannot be undone.</p>
+        {channelDraft && (
+          <div className={styles.modalForm}>
+            {channelDraft.clearHistory && (
+              <p className={styles.dialogWarning}>
+                <span className="material-symbols-outlined">warning</span>
+                All message history in this channel is deleted when you save.
+              </p>
+            )}
+            <label className={styles.fieldGroup}>
+              <span>CHANNEL NAME</span>
+              <input type="text" value={channelDraft.name} maxLength={40} placeholder="e.g. design-talk" autoFocus onChange={event => setChannelDraft(previous => ({ ...previous, name: event.target.value }))} />
+            </label>
+            <label className={styles.fieldGroup}>
+              <span>TYPE</span>
+              <Dropdown
+                value={channelDraft.type}
+                onChange={requestChannelTypeChange}
+                options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]}
+              />
+            </label>
+            {channelDraft.type === 'voice' ? (
+              <>
+                <div className={styles.fieldGroup}>
+                  <span>WHO CAN JOIN</span>
+                  <Dropdown
+                    value={channelDraft.joinMode}
+                    onChange={joinMode => setChannelDraft(previous => ({ ...previous, joinMode }))}
+                    options={[{ value: 'everyone', label: 'Anyone in the community' }, { value: 'roles', label: 'Only selected roles' }, { value: 'invite', label: 'Invite only' }]}
+                  />
+                </div>
+                {channelDraft.joinMode === 'roles' && (
+                <div className={styles.fieldGroup}>
+                  <span>ROLES THAT CAN SEE AND JOIN</span>
+                  <div className={styles.roleCheckboxes}>
+                    {roleEntries.map(([roleId, role]) => (
+                      <label className={`${styles.roleCheckbox} ${channelDraft.joinRoles.includes(roleId) ? styles.checked : ''}`} key={roleId}>
+                        <input
+                          type="checkbox"
+                          checked={channelDraft.joinRoles.includes(roleId)}
+                          onChange={event => setChannelDraft(previous => ({
+                            ...previous,
+                            joinRoles: event.target.checked
+                              ? [...new Set([...previous.joinRoles, roleId])]
+                              : previous.joinRoles.filter(id => id !== roleId)
+                          }))}
+                        />
+                        <span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span>
+                      </label>
+                    ))}
+                    {!roleEntries.length && <span className={styles.noRoles}>Add a role first</span>}
+                  </div>
+                  <span className={styles.noRoles}>{channelDraft.joinRoles.length ? allowedRoleNames(channelDraft.joinRoles) : 'Nobody yet — managers still have access'}</span>
+                </div>
+                )}
+                {channelDraft.joinMode === 'invite' && (
+                  <>
+                <div className={styles.fieldGroup}>
+                  <span>ROLES THAT CAN INVITE</span>
+                  <div className={styles.roleCheckboxes}>
+                    {roleEntries.map(([roleId, role]) => (
+                      <label className={`${styles.roleCheckbox} ${channelDraft.inviteRoles.includes(roleId) ? styles.checked : ''}`} key={roleId}>
+                        <input
+                          type="checkbox"
+                          checked={channelDraft.inviteRoles.includes(roleId)}
+                          onChange={event => setChannelDraft(previous => ({
+                            ...previous,
+                            inviteRoles: event.target.checked
+                              ? [...new Set([...previous.inviteRoles, roleId])]
+                              : previous.inviteRoles.filter(id => id !== roleId)
+                          }))}
+                        />
+                        <span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span>
+                      </label>
+                    ))}
+                    {!roleEntries.length && <span className={styles.noRoles}>Add a role first</span>}
+                  </div>
+                  <span className={styles.noRoles}>{channelDraft.inviteRoles.length ? `${allowedRoleNames(channelDraft.inviteRoles)} can invite` : 'Managers only, until you pick a role'}</span>
+                </div>
+                    <div className={styles.fieldGroup}>
+                      <span>INVITED MEMBERS</span>
+                      {Object.keys(channelDraft.invitedUids || {}).length ? (
+                        <div className={styles.invitedList}>
+                          {Object.keys(channelDraft.invitedUids).map(uid => (
+                            <span className={styles.invitedChip} key={uid}>
+                              {members.find(member => member.uid === uid)?.displayName || 'Member'}
+                              <button
+                                type="button"
+                                title="Revoke invite"
+                                onClick={() => setChannelDraft(previous => ({
+                                  ...previous,
+                                  invitedUids: Object.fromEntries(Object.entries(previous.invitedUids || {}).filter(([invitedUid]) => invitedUid !== uid))
+                                }))}
+                              >
+                                <span className="material-symbols-outlined">close</span>
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className={styles.noRoles}>No one yet. Invite people from the room itself.</span>
+                      )}
+                    </div>
+                  </>
+                )}
+                <p className={styles.cardHint}>Voice rooms have no slow mode or posting access; these settings only control who can see and join.</p>
+              </>
+            ) : (
+              <>
+                <label className={styles.fieldGroup}>
+                  <span>SLOW MODE</span>
+                  <Dropdown value={channelDraft.slowModeSeconds} onChange={value => setChannelDraft(previous => ({ ...previous, slowModeSeconds: Number(value) }))} options={SLOW_MODE_OPTIONS.map(option => ({ value: option.seconds, label: option.label }))} />
+                </label>
+                <div className={styles.fieldGroup}>
+                  <span>SEND ACCESS</span>
+                  <label className={styles.policyToggle}>
+                    <input type="checkbox" checked={channelDraft.isLocked} onChange={event => setChannelDraft(previous => ({ ...previous, isLocked: event.target.checked }))} />
+                    Locked to moderators
+                  </label>
+                </div>
+                <div className={styles.fieldGroup}>
+                  <span>WHO CAN POST</span>
+                  <div className={styles.roleCheckboxes}>
+                    {roleEntries.map(([roleId, role]) => (
+                      <label className={`${styles.roleCheckbox} ${channelDraft.allowedRoles.includes(roleId) ? styles.checked : ''}`} key={roleId}>
+                        <input
+                          type="checkbox"
+                          checked={channelDraft.allowedRoles.includes(roleId)}
+                          onChange={event => setChannelDraft(previous => ({
+                            ...previous,
+                            allowedRoles: event.target.checked
+                              ? [...new Set([...previous.allowedRoles, roleId])]
+                              : previous.allowedRoles.filter(id => id !== roleId)
+                          }))}
+                        />
+                        <span style={{ '--role-color': role.color || '#7dd3fc' }}>{role.name}</span>
+                      </label>
+                    ))}
+                    {!roleEntries.length && <span className={styles.noRoles}>Everyone, until you add roles</span>}
+                  </div>
+                  <span className={styles.noRoles}>{allowedRoleNames(channelDraft.allowedRoles)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </Modal>
 
-      <Modal 
-        isOpen={modalType === 'ban'} 
-        onClose={() => setModalType(null)}
-        title="Ban Member"
+      <Modal
+        isOpen={roleEditorOpen}
+        onClose={() => setRoleEditorOpen(false)}
+        title={roleDraft?.id ? 'Edit role' : 'New role'}
         footer={(
           <>
-            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
-            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={confirmBan}>Ban User</button>
+            <button className={styles.modalCancel} onClick={() => setRoleEditorOpen(false)}>Cancel</button>
+            <button className={styles.modalConfirm} onClick={handleSaveRoleDraft} disabled={adminSaving}>{adminSaving ? 'Saving...' : roleDraft?.id ? 'Save role' : 'Create role'}</button>
           </>
         )}
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p className="text-body-md">Are you sure you want to ban this member? They will lose access to this community.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label className="text-label-sm">BAN DURATION</label>
-            <Dropdown value={banDuration} onChange={setBanDuration} options={[{ value: '-1', label: 'Permanent' }, { value: '60', label: '1 Hour' }, { value: '1440', label: '24 Hours' }, { value: '10080', label: '7 Days' }, { value: '43200', label: '30 Days' }]} />
+        {roleDraft && (
+          <div className={styles.modalForm}>
+            <div className={styles.roleFormGrid}>
+              <label className={styles.fieldGroup}><span>ROLE NAME</span><input value={roleDraft.name} maxLength={32} placeholder="e.g. Event Host" autoFocus onChange={event => setRoleDraft(previous => ({ ...previous, name: event.target.value }))} /></label>
+              <label className={styles.fieldGroup}><span>COLOUR</span><input className={styles.colorInput} type="color" value={roleDraft.color} onChange={event => setRoleDraft(previous => ({ ...previous, color: event.target.value }))} /></label>
+              <label className={styles.fieldGroup}><span>BADGE ICON</span><Dropdown value={roleDraft.badge} onChange={badge => setRoleDraft(previous => ({ ...previous, badge }))} options={ROLE_BADGE_PRESETS.map(badge => ({ value: badge, label: badge }))} /></label>
+            </div>
+            <fieldset className={styles.permissionsFieldset}>
+              <legend>PERMISSIONS</legend>
+              <div className={styles.permissionGrid}>
+                {rolePermissions.map(permission => (
+                  <label className={styles.permissionOption} key={permission.id}>
+                    <input
+                      type="checkbox"
+                      checked={roleDraft.permissions.includes(permission.id)}
+                      onChange={event => setRoleDraft(previous => ({
+                        ...previous,
+                        permissions: event.target.checked
+                          ? [...previous.permissions, permission.id]
+                          : previous.permissions.filter(id => id !== permission.id)
+                      }))}
+                    />
+                    <span>{permission.label}</span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={modalType === 'kick'}
+        isOpen={modalType === 'kick'}
+        onClose={() => setModalType(null)}
+        title="Kick member"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
+            <button className={styles.modalConfirm} onClick={confirmKick}>Kick member</button>
+          </>
+        )}
+      >
+        <p className="text-body-md">They lose access to this community right away, but can rejoin with an invite.</p>
+      </Modal>
+
+      <Modal
+        isOpen={modalType === 'deleteChannel'}
+        onClose={() => setModalType(null)}
+        title="Delete channel"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
+            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={confirmDeleteChannel}>Delete channel</button>
+          </>
+        )}
+      >
+        <p className="text-body-md">The channel is removed from the sidebar and its messages are no longer reachable. This cannot be undone.</p>
+      </Modal>
+
+      <Modal
+        isOpen={modalType === 'ban'}
+        onClose={() => setModalType(null)}
+        title="Ban member"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
+            <button className={styles.modalConfirm} style={{ backgroundColor: 'var(--color-error)' }} onClick={confirmBan}>Ban member</button>
+          </>
+        )}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+          <p className="text-body-md">They are removed now and cannot rejoin until the ban ends. You can lift it from Moderation.</p>
+          <div className={styles.fieldGroup}>
+            <span>BAN DURATION</span>
+            <Dropdown value={banDuration} onChange={setBanDuration} options={[{ value: '-1', label: 'Permanent' }, { value: '60', label: '1 hour' }, { value: '1440', label: '24 hours' }, { value: '10080', label: '7 days' }, { value: '43200', label: '30 days' }]} />
           </div>
         </div>
       </Modal>
 
-      <Modal 
+      <Modal
         isOpen={modalType === 'timeout'}
         onClose={() => setModalType(null)}
-        title="Timeout Member"
+        title="Timeout member"
         footer={<button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>}
       >
-        <p className="text-body-md" style={{ marginBottom: '1rem' }}>How long should this member be timed out?</p>
+        <p className="text-body-md" style={{ marginBottom: '0.9rem' }}>How long should they be unable to post?</p>
         <div className={styles.timeoutGrid}>
           {TIMEOUT_OPTIONS.map(option => <button key={option.label} className={styles.timeoutOption} onClick={() => handleTimeout(selectedTarget, option.minutes)}>{option.label}</button>)}
         </div>
       </Modal>
 
       <Modal
-        isOpen={modalType === 'success'} 
+        isOpen={modalType === 'success'}
         onClose={() => setModalType(null)}
-        title="Success"
+        title="Saved"
         footer={<button className={styles.modalConfirm} onClick={() => setModalType(null)}>Done</button>}
       >
-        <p className="text-body-md">Settings updated successfully!</p>
+        <p className="text-body-md">Community settings were updated.</p>
+      </Modal>
+
+      <Modal
+        isOpen={modalType === 'error'}
+        onClose={() => setModalType(null)}
+        title="Could not save"
+        footer={<button className={styles.modalConfirm} onClick={() => setModalType(null)}>Close</button>}
+      >
+        <p className="text-body-md">The change was not saved. Check your connection and permission, then try again.</p>
       </Modal>
     </div>
   );

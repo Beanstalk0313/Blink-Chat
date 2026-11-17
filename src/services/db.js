@@ -2,6 +2,7 @@ import { firestore, db } from '../firebase/data';
 import { canSendPrivateMessage } from './friends';
 import { buildMemberPermissions, migrateLegacyCommunity, normalizeRoleIds } from './permissions';
 import { mentionsUser } from './utils';
+import { cleanNickname } from './nicknames';
 import {
   collection,
   doc,
@@ -147,6 +148,10 @@ export async function createChannel(communityId, name, type = 'text', options = 
     allowedRoles: options.allowedRoles || [],
     isLocked: Boolean(options.isLocked),
     slowModeSeconds: Number(options.slowModeSeconds) || 0,
+    joinMode: options.joinMode || 'everyone',
+    joinRoles: options.joinRoles || [],
+    inviteRoles: options.inviteRoles || [],
+    invitedUids: options.invitedUids || {},
     position: nextPosition,
     createdAt: new Date().toISOString(),
     lastActivity: firestoreServerTimestamp()
@@ -166,6 +171,14 @@ export async function deleteChannel(channelId) {
   const channelSnap = await getDoc(ref);
   await updateDoc(ref, { deleted: true });
   if (channelSnap.exists()) clearSessionCache(`channels:${channelSnap.data().communityId}`);
+}
+
+// Converting a text channel into a voice room removes its history: this clears
+// the RTDB message path and the session cache in one go.
+export async function clearChannelMessages(channelId) {
+  if (!db) return;
+  await remove(ref(db, `messages/${channelId}`));
+  messagesCache.delete(channelId);
 }
 
 export async function getChannels(communityId) {
@@ -238,29 +251,102 @@ export async function leaveVoiceChannel(channelId, uid) {
   await set(ref(db, `voiceParticipants/${channelId}/${uid}`), null);
 }
 
+// ---- private call ringing --------------------------------------------------
+// A ring is a small RTDB record: the caller does not open the call surface
+// until the callee flips the invite to `accepted`, and either side can drop it.
+export const CALL_RING_TIMEOUT_MS = 45000;
+
+export async function createCallInvite({ callerUid, callerName, callerAvatar, calleeUid, calleeName, calleeAvatar, roomId, type = 'voice' }) {
+  if (!db) throw new Error('Calls are unavailable while Firebase is offline.');
+  const inviteRef = push(ref(db, 'callInvites'));
+  await set(inviteRef, {
+    callerUid,
+    callerName: callerName || 'Someone',
+    callerAvatar: callerAvatar || '',
+    calleeUid,
+    calleeName: calleeName || 'Someone',
+    calleeAvatar: calleeAvatar || '',
+    roomId,
+    type,
+    status: 'ringing',
+    createdAt: Date.now()
+  });
+  return inviteRef.key;
+}
+
+export function subscribeToCallInvite(inviteId, callback) {
+  if (!db || !inviteId) return () => {};
+  return onValue(ref(db, `callInvites/${inviteId}`), snapshot => callback(snapshot.val() || null));
+}
+
+export function subscribeToIncomingCalls(uid, callback) {
+  if (!db || !uid) return () => {};
+  return onValue(ref(db, 'callInvites'), snapshot => {
+    const oldest = Date.now() - CALL_RING_TIMEOUT_MS;
+    const rings = Object.entries(snapshot.val() || {})
+      .map(([id, invite]) => ({ id, ...invite }))
+      .filter(invite => invite.calleeUid === uid && invite.status === 'ringing' && Number(invite.createdAt) > oldest)
+      .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+    callback(rings[0] || null);
+  });
+}
+
+export async function respondToCallInvite(inviteId, status) {
+  if (!db) return;
+  await update(ref(db, `callInvites/${inviteId}`), { status });
+}
+
+export async function cancelCallInvite(inviteId) {
+  if (!db) return;
+  await remove(ref(db, `callInvites/${inviteId}`));
+}
+
 export function subscribeToVoiceParticipants(callback) {
   if (!db) return () => {};
   return onValue(ref(db, 'voiceParticipants'), snapshot => callback(snapshot.val() || {}));
+}
+
+// Presence is a heartbeat, not a socket state: onDisconnect covers a clean exit,
+// but a crashed client, a killed laptop or a dead network leaves online:true
+// behind forever. A write only counts as online while it is recent, so a stale
+// entry decays to offline on its own.
+const PRESENCE_HEARTBEAT_MS = 30000;
+const PRESENCE_STALE_AFTER_MS = PRESENCE_HEARTBEAT_MS * 3;
+
+export function isUserOnline(entry) {
+  if (!entry || entry.online !== true) return false;
+  const lastSeen = Number(entry.lastSeen) || 0;
+  return Date.now() - lastSeen <= PRESENCE_STALE_AFTER_MS;
 }
 
 export function startPresence(uid) {
   if (!db || typeof window === 'undefined') return () => {};
   const connectedRef = ref(db, '.info/connected');
   const presenceRef = ref(db, `presence/${uid}`);
+  const markOnline = () => update(presenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
+  const markOffline = () => update(presenceRef, { online: false, lastSeen: Date.now() }).catch(() => {});
   const connectedUnsubscribe = onValue(connectedRef, snapshot => {
     if (snapshot.val() !== true) return;
     onDisconnect(presenceRef).set({ online: false, lastSeen: Date.now() });
     // update(), not set(): the game activity written by gamePresence lives on
     // the same node and must survive the online/lastSeen writes.
-    update(presenceRef, { online: true, lastSeen: Date.now() });
+    markOnline();
   });
-  const heartbeat = window.setInterval(() => {
-    update(presenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
-  }, 60000);
+  const heartbeat = window.setInterval(markOnline, PRESENCE_HEARTBEAT_MS);
+  // A backgrounded tab can miss several beats, and a closing tab gets one last
+  // chance to clear itself before the socket drops.
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible') markOnline();
+  };
+  const handlePageHide = () => markOffline();
+  document.addEventListener('visibilitychange', handleVisibility);
+  window.addEventListener('pagehide', handlePageHide);
   return () => {
     window.clearInterval(heartbeat);
+    document.removeEventListener('visibilitychange', handleVisibility);
+    window.removeEventListener('pagehide', handlePageHide);
     connectedUnsubscribe();
-    update(presenceRef, { online: false, lastSeen: Date.now() }).catch(() => {});
+    markOffline();
   };
 }
 
@@ -1153,9 +1239,15 @@ export function subscribeToPrivateMessages(conversationId, callback, onError) {
   };
 }
 
-export async function sendPrivateMessage(conversationId, senderUid, recipientUid, text, participants = {}) {
+export async function sendPrivateMessage(conversationId, senderUid, recipientUid, text, participants = {}, attachment = null, invite = null, replyTo = null) {
   const trimmedText = text.trim();
-  if (!trimmedText) return;
+  if (!trimmedText && !attachment?.url && !invite?.communityId) return;
+  // The security rules require non-empty text on every private message, so an
+  // attachment sent on its own travels under its file name (the bubble hides it
+  // when it matches the attachment name).
+  // `text` stays the stored fallback (rules require it), while the attachment or
+  // invite object is what the UI renders in its place.
+  const storedText = trimmedText || attachment?.name || (invite?.name ? `Shared ${invite.name}` : '') || 'Attachment';
 
   // Privacy is decided in one place (services/friends) so the Message button
   // and the send path cannot disagree. RTDB rules cannot read Firestore, so
@@ -1188,7 +1280,7 @@ export async function sendPrivateMessage(conversationId, senderUid, recipientUid
   await update(conversationRef, {
     members: { [sortedMembers[0]]: true, [sortedMembers[1]]: true },
     participants,
-    lastMessage: trimmedText,
+    lastMessage: storedText,
     lastSenderUid: senderUid,
     updatedAt: serverTimestamp()
   });
@@ -1196,7 +1288,29 @@ export async function sendPrivateMessage(conversationId, senderUid, recipientUid
   const messageRef = push(ref(db, `privateConversations/${conversationId}/messages`));
   // Server-stamped like channel messages, so a skewed device clock cannot
   // reorder one person's private messages against the other's.
-  await set(messageRef, { senderUid, text: trimmedText, timestamp: serverTimestamp() });
+  await set(messageRef, {
+    senderUid,
+    text: storedText,
+    timestamp: serverTimestamp(),
+    ...(attachment?.url ? { attachment: { url: attachment.url, name: attachment.name || 'Attachment', size: Number(attachment.size) || 0 } } : {}),
+    ...(replyTo?.id ? {
+      replyTo: {
+        id: String(replyTo.id),
+        authorUid: String(replyTo.authorUid || ''),
+        authorName: String(replyTo.authorName || '').slice(0, 64),
+        text: String(replyTo.text || '').slice(0, 500)
+      }
+    } : {}),
+    ...(invite?.communityId ? {
+      invite: {
+        communityId: invite.communityId,
+        name: cleanNickname(invite.name || 'Community'),
+        description: String(invite.description || '').slice(0, 300),
+        isPrivate: Boolean(invite.isPrivate),
+        joincode: invite.isPrivate ? String(invite.joincode || '') : ''
+      }
+    } : {})
+  });
 
   // Same server clock as updatedAt, so the sender's own conversation cannot
   // look unread because the two were stamped by different clocks.
@@ -1212,6 +1326,13 @@ export async function markPrivateConversationRead(uid, conversationId, readThrou
   const readRef = ref(db, `privateConversationsByUser/${uid}/${conversationId}/lastReadAt`);
   await runDatabaseTransaction(readRef, currentValue => Math.max(Number(currentValue || 0), Number(readThroughTimestamp) || Date.now()));
   clearSessionCache(`private-conversations:${uid}`);
+}
+
+// Reactions live on the message like channel reactions do; the rule change lets
+// the recipient write only inside `reactions`, never to the message itself.
+export async function togglePrivateReaction(conversationId, messageId, emoji, uid, currentlyReacted) {
+  if (!db || !conversationId || !messageId || !emoji || !uid) return;
+  await set(ref(db, `privateConversations/${conversationId}/messages/${messageId}/reactions/${emoji}/${uid}`), currentlyReacted ? null : true);
 }
 
 export async function deletePrivateMessage(conversationId, messageId) {
@@ -1258,6 +1379,30 @@ export async function setChannelNotificationMode(uid, channelId, mode) {
   const validModes = ['none', 'mentions', 'all'];
   await updateDoc(doc(firestore, 'users', uid), {
     [`notificationPreferences.channelModes.${channelId}`]: validModes.includes(mode) ? mode : 'mentions'
+  });
+  sessionCache.delete(`user:${uid}`);
+}
+
+// Nicknames ride on the owner's own user document: `users` is already readable
+// to signed-in members (that is how member lists resolve names) and the profile
+// update rule allows additional fields, so no rules change is needed. A
+// nickname never replaces the account display name, which is what @mentions
+// match on and what friend lookup searches.
+export async function setCommunityNickname(uid, communityId, nickname) {
+  if (!uid || !communityId) return;
+  const value = cleanNickname(nickname);
+  await updateDoc(doc(firestore, 'users', uid), {
+    [`communityNicknames.${communityId}`]: value || deleteField()
+  });
+  sessionCache.delete(`user:${uid}`);
+  sessionCache.delete(`members:${communityId}`);
+}
+
+export async function setFriendNickname(uid, otherUid, nickname) {
+  if (!uid || !otherUid) return;
+  const value = cleanNickname(nickname);
+  await updateDoc(doc(firestore, 'users', uid), {
+    [`friendNicknames.${otherUid}`]: value || deleteField()
   });
   sessionCache.delete(`user:${uid}`);
 }

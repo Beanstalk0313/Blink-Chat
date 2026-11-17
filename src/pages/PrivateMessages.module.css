@@ -355,6 +355,172 @@
   flex-direction: column;
 }
 
+.reactionWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.emojiPicker {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 30;
+  display: flex;
+  gap: 0.1rem;
+  padding: 0.3rem;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--tint-subtle);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 28px var(--color-shadow);
+  animation: emojiPickerIn 130ms ease both;
+}
+
+@keyframes emojiPickerIn {
+  from { opacity: 0; transform: translateY(0.25rem) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.emojiChoice {
+  width: 1.9rem;
+  height: 1.9rem;
+  font-size: 1rem;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.emojiChoice:hover {
+  background: var(--tint-hover);
+}
+
+.replyQuote {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  max-width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+  color: var(--color-on-surface-variant);
+  background: var(--tint-subtle);
+  border: 0;
+  border-left: 2px solid var(--color-primary-medium);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: var(--font-label-sm);
+}
+
+.replyQuote .material-symbols-outlined {
+  font-size: 1rem;
+  color: var(--color-tertiary);
+}
+
+.replyQuoteText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.replyQuoteText strong {
+  color: var(--color-on-surface);
+  font: var(--font-label-sm);
+}
+
+.replyQuoteText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-tertiary);
+}
+
+.reactionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.reactionChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  color: var(--color-on-surface-variant);
+  background: var(--tint-subtle);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font: var(--font-label-sm);
+}
+
+.reactionChip:hover {
+  background: var(--tint-hover);
+}
+
+.reactionChipActive {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-medium);
+}
+
+.replyPreview {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 60rem;
+  margin: 0 auto 0.4rem;
+  padding: 0.4rem 0.7rem;
+  color: var(--color-on-surface-variant);
+  background: var(--tint-subtle);
+  border-left: 2px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  font: var(--font-label-sm);
+}
+
+.replyPreview > .material-symbols-outlined {
+  font-size: 1rem;
+  color: var(--color-primary);
+}
+
+.replyPreviewText {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+
+.replyPreviewText strong {
+  color: var(--color-on-surface);
+  font: var(--font-label-sm);
+}
+
+.replyPreviewText small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replyPreview button {
+  display: inline-flex;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.headerAvatarBtn {
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+}
+
 .messageHeader {
   display: flex;
   align-items: baseline;
@@ -415,6 +581,68 @@
   border: 1px solid var(--tint-subtle);
   border-radius: var(--radius-sm);
   overflow-wrap: anywhere;
+}
+
+.messageBubble > div + div {
+  margin-top: 0.4rem;
+}
+
+/* Markdown inside private messages, matching the channel styling. */
+.mdLink {
+  color: var(--color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mdInlineCode {
+  padding: 0.1rem 0.3rem;
+  border-radius: var(--radius-sm);
+  background: var(--tint-active);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.88em;
+}
+
+.mdCodeBlock {
+  position: relative;
+  margin: 0.4rem 0 0;
+  padding: 0.7rem 0.8rem;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--tint-subtle);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 0.85em;
+  white-space: pre;
+}
+
+.mdCodeBlockLang {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  text-transform: uppercase;
+}
+
+.mdQuote {
+  margin: 0.35rem 0 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--tint-strong);
+  color: var(--color-on-surface-variant);
+}
+
+.mdHeading {
+  margin: 0.35rem 0 0;
+  color: var(--color-on-surface);
+  font: var(--font-label-md);
+}
+
+.mdHeading[data-level='1'] {
+  font: var(--font-headline-md);
+}
+
+.mdList {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
 }
 
 .sent .messageBubble {
@@ -564,6 +792,84 @@
   .messageActions {
     opacity: 1;
   }
+}
+
+.attachWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.attachMenu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  min-width: 11rem;
+  padding: 0.35rem;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 30px var(--color-shadow);
+  z-index: 20;
+}
+
+.attachItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  color: var(--color-on-surface);
+  font: var(--font-label-md);
+  cursor: pointer;
+}
+
+.attachItem:hover {
+  background: var(--tint-hover);
+}
+
+.attachItem .material-symbols-outlined {
+  font-size: 1.15rem;
+}
+
+.pendingAttachment {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 60rem;
+  margin: 0 auto 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-sm);
+  color: var(--color-on-surface-variant);
+  font: var(--font-label-sm);
+}
+
+.pendingAttachment button {
+  margin-left: auto;
+  display: inline-flex;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.fileCard {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-sm);
+  background: var(--tint-subtle);
+  font: var(--font-label-sm);
+}
+
+.fileCard a {
+  display: inline-flex;
+  color: var(--color-primary);
 }
 
 @media (prefers-reduced-motion: reduce) {

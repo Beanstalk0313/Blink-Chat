@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getCommunity, joinCommunity } from '../services/db';
+import { inviteCodeMatches } from '../services/invites';
 import { useAuth } from '../contexts/AuthContext';
 import styles from './JoinCommunity.module.css';
 
 export default function JoinCommunity() {
   const { communityId } = useParams();
+  const [searchParams] = useSearchParams();
+  // An invite link carries its code, so the recipient never types it. A link is
+  // still only an affordance: a wrong code is refused here and by the same
+  // helper the share modal builds links with.
+  const codeFromLink = searchParams.get('joincode') || '';
   const { currentUser, login, register } = useAuth();
   const navigate = useNavigate();
+  const autoJoinAttempted = useRef(false);
   const [community, setCommunity] = useState(null);
   const [loading, setLoading] = useState(true);
   const [inviteCode, setInviteCode] = useState('');
@@ -41,13 +48,13 @@ export default function JoinCommunity() {
     }
   }, [communityId, currentUser, navigate]);
 
-  const handleJoin = async () => {
+  const joinWithCode = async code => {
     if (!currentUser || !community) return;
     setJoining(true);
     setError('');
     try {
-      if (community.isPrivate && inviteCode.toUpperCase() !== community.inviteCode?.toUpperCase()) {
-        throw new Error('Invalid invite code');
+      if (community.isPrivate && !inviteCodeMatches(community, code ?? inviteCode)) {
+        throw new Error(code ? 'That invite link is not valid for this community.' : 'Invalid invite code');
       }
       await joinCommunity(currentUser.uid, communityId);
       navigate(`/channels/${communityId}`);
@@ -57,6 +64,20 @@ export default function JoinCommunity() {
     }
   };
 
+  const handleJoin = () => joinWithCode(inviteCode);
+
+  // A private community's invite link joins on arrival; a public community still
+  // uses the normal button, because its link carries no code to verify.
+  useEffect(() => {
+    if (!codeFromLink || !community?.isPrivate || !currentUser || autoJoinAttempted.current) return;
+    if (currentUser?.profile?.joinedCommunities?.includes(communityId)) return undefined;
+    autoJoinAttempted.current = true;
+    // Deferred so the join's state updates are not a synchronous setState in an effect.
+    const timer = window.setTimeout(() => joinWithCode(codeFromLink), 0);
+    return () => window.clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codeFromLink, community, currentUser, communityId]);
+
   const handleAuth = async event => {
     event.preventDefault();
     setAuthLoading(true);
@@ -64,7 +85,8 @@ export default function JoinCommunity() {
     try {
       if (authMode === 'login') await login(email, password);
       else await register(email, password, displayName);
-      navigate(`/join/${communityId}`, { replace: true });
+      // Keep the invite code across sign-in so the link still works afterwards.
+      navigate(`/join/${communityId}${codeFromLink ? `?joincode=${encodeURIComponent(codeFromLink)}` : ''}`, { replace: true });
     } catch (authError) {
       setError(authError.message || 'Authentication failed.');
     } finally {

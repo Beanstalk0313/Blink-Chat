@@ -6,6 +6,7 @@ import { firestore } from '../../firebase/data';
 import Sidebar from './Sidebar';
 import { useCall } from '../../contexts/CallContext';
 import CallOverlay from '../common/CallOverlay';
+import CallRinging from '../common/CallRinging';
 import RulesModal from '../common/RulesModal';
 import Tutorial from '../common/Tutorial';
 import GlobalBannedScreen from '../common/GlobalBannedScreen';
@@ -104,9 +105,15 @@ const AppLayout = () => {
       
       {/* Mobile Top App Bar */}
       <div className={styles.mobileTopBar}>
-        <div className={styles.brandName}>BLINK</div>
+        <Link to="/" className={styles.brandHome} title="Blink Chat home" aria-label="Blink Chat home">
+          <img className={styles.brandLogo} src="/logo.svg" alt="" />
+          <span className={styles.brandName}>BLINK</span>
+        </Link>
         <div className={styles.topBarActions}>
-          <Link to="/profile">
+          <Link to="/settings" title="Settings" aria-label="Settings">
+            <span className="material-symbols-outlined">settings</span>
+          </Link>
+          <Link to="/profile" title="Profile" aria-label="Profile">
             <span className="material-symbols-outlined">account_circle</span>
           </Link>
         </div>
@@ -122,12 +129,10 @@ const AppLayout = () => {
         </main>
       </div>
 
+      <CallRinging />
+
       {/* Mobile Bottom Navigation */}
       <nav className={styles.mobileBottomNav}>
-        <Link to="/" className={styles.bottomNavItem}>
-          <span className="material-symbols-outlined">home</span>
-          <span className="text-label-sm">Home</span>
-        </Link>
         <Link to="/communities" className={styles.bottomNavItem}>
           <span className="material-symbols-outlined">grid_view</span>
           <span className="text-label-sm">Communities</span>
@@ -140,9 +145,9 @@ const AppLayout = () => {
           <span className="material-symbols-outlined">forum</span>
           <span className="text-label-sm">Messages</span>
         </Link>
-        <Link to="/settings" className={styles.bottomNavItem}>
-          <span className="material-symbols-outlined">settings</span>
-          <span className="text-label-sm">Settings</span>
+        <Link to="/friends" className={styles.bottomNavItem}>
+          <span className="material-symbols-outlined">group</span>
+          <span className="text-label-sm">Friends</span>
         </Link>
       </nav>
     </div>

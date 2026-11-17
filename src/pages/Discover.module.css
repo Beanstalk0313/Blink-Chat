@@ -10,9 +10,11 @@
   text-align: center;
 }
 
+/* `min()` keeps a column from ever being wider than the viewport, so a narrow
+   window scrolls to one column instead of pushing cards off the right edge. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
   gap: 2rem;
 }
 
@@ -42,6 +44,14 @@
   gap: 1rem;
 }
 
+.cardHeader > div {
+  min-width: 0;
+}
+
+.cardHeader h3 {
+  overflow-wrap: anywhere;
+}
+
 .icon, .iconPlaceholder {
   width: 4rem;
   height: 4rem;
@@ -60,6 +70,7 @@
 .description {
   flex: 1;
   color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
 }
 
 .joinBtn {
@@ -107,5 +118,96 @@
   color: var(--color-tertiary);
   padding: 3rem;
   font: var(--font-body-lg);
+}
+
+/* Phones: one card per row, a compact horizontal identity row, a two-line
+   description and the actions pinned underneath. */
+@media (max-width: 767px) {
+  .discoverContainer {
+    padding: 1rem 1rem 1.5rem;
+  }
+
+  .header {
+    margin-bottom: 1.25rem;
+    text-align: left;
+  }
+
+  .header :global(.text-display-xl) {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+
+  .header :global(.text-body-lg) {
+    font-size: 0.875rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .card {
+    gap: 0.7rem;
+    padding: 0.9rem;
+    border-radius: var(--radius-md);
+    backdrop-filter: none;
+    box-shadow: 0 2px 8px var(--color-shadow-weak);
+  }
+
+  .card:hover {
+    transform: none;
+  }
+
+  .cardHeader {
+    align-items: flex-start;
+    gap: 0.7rem;
+  }
+
+  .icon,
+  .iconPlaceholder {
+    width: 2.75rem;
+    height: 2.75rem;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+  }
+
+  .iconPlaceholder :global(.material-symbols-outlined) {
+    font-size: 1.3rem;
+  }
+
+  .cardHeader :global(.text-headline-md) {
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  .description {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    margin: 0;
+    overflow: hidden;
+    font-size: 0.85rem;
+  }
+
+  .cardActions {
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .joinBtn {
+    padding: 0.6rem;
+    font-size: 0.8rem;
+  }
+
+  .shareBtn {
+    flex-shrink: 0;
+    padding: 0.6rem;
+  }
+
+  .loading,
+  .emptyState {
+    padding: 2rem 0;
+    font: var(--font-body-md);
+  }
 }
 

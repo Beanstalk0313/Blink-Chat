@@ -39,6 +39,23 @@ service cloud.firestore {
       );
     }
 
+    // Roles assigned to a member, normalised to a list: legacy documents store
+    // a single role id string instead of an array.
+    function memberRoleIds(community, uid) {
+      let assigned = community.memberRoles != null ? community.memberRoles[uid] : null;
+      return assigned == null ? [] : (assigned is list ? assigned : [assigned]);
+    }
+
+    // Members holding one of an invite-only voice room's inviter roles may add
+    // guests to that room's invitedUids map without full channel management.
+    function canInviteToVoiceChannel(channel) {
+      return channel.type == 'voice' &&
+        channel.joinMode == 'invite' &&
+        channel.inviteRoles is list &&
+        exists(/databases/$(database)/documents/communities/$(channel.communityId)) &&
+        memberRoleIds(get(/databases/$(database)/documents/communities/$(channel.communityId)).data, request.auth.uid).hasAny(channel.inviteRoles);
+    }
+
     // ============================== users ==============================
     // NOTE: reads are granted to every signed-in non-banned user because the
     // member list, global user search, and profiles all read from this
@@ -111,6 +128,10 @@ service cloud.firestore {
       allow update: if hasCommunityPermission(resource.data.communityId, 'manage_channels') ||
         (
           isCommunityMember(resource.data.communityId) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['invitedUids']) &&
+          canInviteToVoiceChannel(resource.data)
+        ) ||
+        (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActivity'])
         );
       allow delete: if hasCommunityPermission(resource.data.communityId, 'manage_channels');

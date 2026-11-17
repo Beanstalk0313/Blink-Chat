@@ -23,6 +23,12 @@
   animation: slideUp 0.3s ease;
 }
 
+/* Wider dialogs (e.g. the pinned message list) keep the same look but give
+   their content the room a full message needs. */
+.modalWide {
+  max-width: 46rem;
+}
+
 .header {
   padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--tint-subtle);

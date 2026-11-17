@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import styles from './Modal.module.css';
 
-const Modal = ({ isOpen, onClose, title, children, footer }) => {
+const Modal = ({ isOpen, onClose, title, children, footer, wide = false }) => {
   // Exit animation: when isOpen flips to false we keep rendering with the
   // `closing` flag so the fade/slide-out plays, then clear it (unmounting
   // via the `!isOpen && !closing` check below) after the animation window.
@@ -25,7 +25,7 @@ const Modal = ({ isOpen, onClose, title, children, footer }) => {
 
   return (
     <div className={`${styles.overlay} ${closing ? styles.overlayClosing : ''}`} onClick={() => { if (!closing) onClose?.(); }}>
-      <div className={`${styles.modal} ${closing ? styles.modalClosing : ''}`} onClick={e => e.stopPropagation()}>
+      <div className={`${styles.modal} ${wide ? styles.modalWide : ''} ${closing ? styles.modalClosing : ''}`} onClick={e => e.stopPropagation()}>
         <div className={styles.header}>
           <h2 className="text-headline-md">{title}</h2>
           {onClose && <button className={styles.closeBtn} onClick={onClose} aria-label="Close">

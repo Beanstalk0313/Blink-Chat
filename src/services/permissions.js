@@ -64,6 +64,35 @@ export function hasCommunityPermission(community, uid, permission) {
   return getMemberPermissions(community, uid).includes(permission);
 }
 
+// Voice rooms can be open to everyone, limited to some roles, or invite-only.
+export function voiceJoinMode(channel) {
+  return channel?.joinMode === 'roles' || channel?.joinMode === 'invite' ? channel.joinMode : 'everyone';
+}
+
+// Decides both whether a voice room is listed in the sidebar and whether it
+// can be joined. Text channels are unaffected by voice join settings.
+export function canAccessVoiceChannel(community, channel, uid) {
+  if (!channel || channel.type !== 'voice') return true;
+  const mode = voiceJoinMode(channel);
+  if (mode === 'everyone') return true;
+  if (!uid) return false;
+  if (community?.adminUid === uid) return true;
+  const permissions = getMemberPermissions(community, uid);
+  if (permissions.includes('manage_channels') || permissions.includes('manage_members')) return true;
+  const roleIds = getMemberRoleIds(community, uid);
+  if (mode === 'roles') return (channel.joinRoles || []).some(roleId => roleIds.includes(roleId));
+  return Boolean(channel.invitedUids?.[uid]) || (channel.inviteRoles || []).some(roleId => roleIds.includes(roleId));
+}
+
+export function canInviteToVoiceChannel(community, channel, uid) {
+  if (!channel || channel.type !== 'voice' || voiceJoinMode(channel) !== 'invite' || !uid) return false;
+  if (community?.adminUid === uid) return true;
+  const permissions = getMemberPermissions(community, uid);
+  if (permissions.includes('manage_channels') || permissions.includes('manage_members')) return true;
+  const roleIds = getMemberRoleIds(community, uid);
+  return (channel.inviteRoles || []).some(roleId => roleIds.includes(roleId));
+}
+
 export function buildMemberPermissions(roles = {}, memberRoles = {}) {
   const normalizedRoles = normalizeRoles(roles);
   return Object.fromEntries(Object.entries(memberRoles).map(([uid, value]) => {

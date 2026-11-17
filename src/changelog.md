@@ -10,6 +10,39 @@ file needs touching, though keeping package.json's version in sync is nice:
     - First note
     - Second note
 
+## 2.9.5 | 2026-11-16 | Call from a private chat, attach files, Friends on mobile
+- The lock in a private conversation's header is now a call button: it opens a call with that person, using the same room system as community voice channels, so you both land in the same call.
+- Private messages have the composer's plus button back. Attach a file and it uploads, shows as a chip above the composer, and arrives as a download card in the conversation.
+- Friends is reachable on phones now: it has its own item in the bottom navigation, next to Communities, Discover and Messages.
+- On phones, the Blink logo at the top left is now the home button (tap the pill to go home), and Settings lives in the top bar. The bottom bar carries four destinations, so its labels stay readable.
+- Discover is built for phones now: one compact card per row with the community icon beside its name, a two-line description and the Join and share buttons underneath, instead of oversized tiles that ran off the screen.
+- Cleaned up the underline that appeared under the top-bar Settings and Profile icons.
+- Nicknames: set your own nickname inside a community from the badge button in its header. It replaces your name on your messages and in that community's member list, while your @mentions and account name stay exactly as they were.
+- Private nicknames: give a friend a name only you see, from Friends → Nickname. It follows them through your friends list, your private messages, community messages, member lists and voice rosters; their profile keeps their real name.
+- Nickname, Share and Pin moved to their own row at the bottom of the channel sidebar, so the community name and description are no longer crowded.
+- Online status is honest now: someone counts as online only while their app keeps checking in, so closed or crashed clients settle to offline within about 90 seconds instead of looking online forever.
+- The notification and search menus animate open and closed, with the same surfaces, borders and radii as the rest of the app.
+- The members pane slides open and closed instead of popping in and vanishing.
+- Channel and message lists scroll with Blink's own scrollbar styling rather than the browser default.
+- Share now opens a choice first: send the invite straight to a friend in a private message, or share/copy the link the way it worked before.
+- Invite links can carry the code: a private community's link looks like /join/<id>?joincode=CODE, so a friend you trust joins from it without typing anything. A wrong or missing code is still refused.
+- A shared invite arrives as an embed: a card with the community's name, icon, description and a Join community button, instead of a message with a link inside it.
+- Private messages render markdown now (bold, italic, strikethrough, code, links, quotes, lists), just like channels.
+- Pinned messages are marked: a small pin sits beside the time on every pinned message so everyone can see it matters, and the pin action turns into an unpin action on messages that are already pinned.
+- The pinned messages dialog renders each entry as the full message it is, with avatar, role, reactions, polls and attachments, instead of a stripped-down text summary.
+- Community settings got a redesign that matches Blink: one clean section list, grouped cards instead of a wall of fields, channel cards that carry their own slow-mode, lock and posting-access controls, and a members list you can search and filter by role.
+- New Moderation tab: see everyone who is banned or timed out, with when it ends and one-click Unban or Clear, so bans no longer disappear into a list you cannot reach.
+- General settings are split into identity, appearance, safety and activity sections, and invite management lives in its own card with a Copy invite link button.
+- Creating a channel or a role now opens a dialog instead of an inline form, and channel cards are read-only until you press the pencil: the pencil opens the same dialog for renaming, slow mode, locking and posting access.
+- The channel dialog can now switch a channel between text and voice. Voice rooms skip slow mode and posting controls entirely, and the channel card says "Join-only room" instead of posting badges.
+- Voice rooms now choose who gets in: anyone in the community, only selected roles (which also decides who sees the room), or invite only. Invite-only rooms hold a member list you can revoke, and people with an allowed inviter role get an Invite someone button inside the room.
+- Switching an existing text channel to voice warns that its message history is deleted, and the history is only cleared once you save the change.
+- Calling someone from a private chat rings them first: they get an incoming call card with Accept and Decline, and you wait in a "Calling…" card that you can cancel. Nothing joins the room until they answer, and a ring that nobody answers drops after 45 seconds.
+- A small formatting bar above the composer adds bold, italic, strikethrough and code with one click, wrapping whatever text you have selected.
+- Private messages feel like channels now: your friend's nickname shows on their messages, and tapping a message's avatar or name (or the avatar in the conversation header) opens their mini profile with the usual actions.
+- Replies and reactions work in private messages: reply to a message to quote it (tap the quote to jump back to it), and react with any of six emoji, with the same chip and toggle behaviour as channels.
+- The mini profile closes when you click anywhere outside it, and fades out instead of vanishing.
+
 ## 2.9.4 | 2026-11-16 | Messages stay in order, loading screens centred
 - Messages are now stamped by the server instead of your device's clock, so a computer whose time is a few minutes off can no longer push one person's replies to the bottom of a conversation. Older messages whose stored time disagrees with their push ID by more than two minutes are ordered by the push ID, which is server-corrected, so existing conversations line up too.
 - Conversation ordering and unread badges follow the server too: a private conversation's `updatedAt` and a channel's `lastActivity` are server-stamped, so a skewed clock cannot reshuffle the message list or leave a badge stuck.

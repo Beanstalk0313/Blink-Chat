@@ -72,6 +72,13 @@
         }
       }
     },
+    "callInvites": {
+      ".read": "auth != null",
+      "$inviteId": {
+        ".write": "auth != null && ((!data.exists() && newData.child('callerUid').val() === auth.uid) || (data.exists() && (data.child('callerUid').val() === auth.uid || data.child('calleeUid').val() === auth.uid)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['callerUid', 'calleeUid', 'roomId', 'type', 'status', 'createdAt']) && newData.child('callerUid').isString() && newData.child('calleeUid').isString() && newData.child('roomId').isString() && newData.child('roomId').val().length <= 160 && (newData.child('status').val() === 'ringing' || newData.child('status').val() === 'accepted' || newData.child('status').val() === 'declined') && newData.child('createdAt').isNumber() && (!data.exists() || (data.child('callerUid').val() === newData.child('callerUid').val() && data.child('calleeUid').val() === newData.child('calleeUid').val() && data.child('roomId').val() === newData.child('roomId').val())))"
+      }
+    },
 
     "privateConversations": {
       "$conversationId": {
@@ -81,8 +88,16 @@
         "messages": {
           "$messageId": {
             ".read": "auth != null && data.parent().parent().child('members').child(auth.uid).exists()",
-            ".write": "auth != null && (!data.exists() || !newData.exists() || data.child('senderUid').val() === auth.uid)",
-            ".validate": "!newData.exists() || (newData.hasChildren(['senderUid', 'text', 'timestamp']) && newData.child('senderUid').isString() && newData.child('senderUid').val() === auth.uid && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 4000 && newData.child('timestamp').isNumber())"
+            ".write": "auth != null && (!data.exists() || !newData.exists() || data.child('senderUid').val() === auth.uid || (newData.child('senderUid').val() === data.child('senderUid').val() && newData.child('text').val() === data.child('text').val() && newData.child('timestamp').val() === data.child('timestamp').val()))",
+            ".validate": "!newData.exists() || (newData.hasChildren(['senderUid', 'text', 'timestamp']) && newData.child('senderUid').isString() && newData.child('timestamp').isNumber() && (!data.exists() ? newData.child('senderUid').val() === auth.uid : newData.child('senderUid').val() === data.child('senderUid').val()) && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 4000 && (!newData.hasChild('replyTo') || (newData.child('replyTo').hasChildren(['id']) && newData.child('replyTo/id').isString() && newData.child('replyTo/id').val().length <= 64 && (!newData.hasChild('replyTo/authorUid') || newData.child('replyTo/authorUid').isString()) && (!newData.hasChild('replyTo/authorName') || (newData.child('replyTo/authorName').isString() && newData.child('replyTo/authorName').val().length <= 64)) && (!newData.hasChild('replyTo/text') || (newData.child('replyTo/text').isString() && newData.child('replyTo/text').val().length <= 500)))) && (!newData.hasChild('invite') || (newData.child('invite').hasChildren(['communityId']) && newData.child('invite/communityId').isString() && (!newData.hasChild('invite/name') || newData.child('invite/name').isString()) && (!newData.hasChild('invite/description') || (newData.child('invite/description').isString() && newData.child('invite/description').val().length <= 300)))))",
+            "reactions": {
+              "$emoji": {
+                "$uid": {
+                  ".write": "auth != null && auth.uid === $uid",
+                  ".validate": "!newData.exists() || newData.isBoolean()"
+                }
+              }
+            }
           }
         }
       }

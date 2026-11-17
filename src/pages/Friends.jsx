@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import UserAvatar from '../components/common/UserAvatar';
-import { findUserByExactDisplayName, getUserProfile, subscribeToCommunityPresence } from '../services/db';
+import { findUserByExactDisplayName, getUserProfile, isUserOnline, setFriendNickname, subscribeToCommunityPresence } from '../services/db';
+import { cleanNickname, friendNicknameOf, NICKNAME_MAX_LENGTH } from '../services/nicknames';
+import Modal from '../components/common/Modal';
 import {
   blockUser,
   messagePrivacyOf,
@@ -26,10 +28,11 @@ const TABS = [
 ];
 
 function presenceLine(presenceEntry, profile) {
+  // A stale heartbeat is not "online": presence decays after ~90s without one.
+  if (!isUserOnline(presenceEntry)) return { text: 'Offline', playing: false };
   const game = presenceEntry?.game;
   if (game?.name) return { text: `Playing ${game.name}`, playing: true };
-  if (presenceEntry?.online) return { text: profile?.status || 'Online', playing: false };
-  return { text: 'Offline', playing: false };
+  return { text: profile?.status || 'Online', playing: false };
 }
 
 export default function Friends() {
@@ -48,6 +51,9 @@ export default function Friends() {
   const [lookupState, setLookupState] = useState('idle'); // idle | searching | found | empty
   const [busyUid, setBusyUid] = useState(null);
   const [error, setError] = useState('');
+  const [nicknameTarget, setNicknameTarget] = useState(null);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [savingNickname, setSavingNickname] = useState(false);
 
   const blockedUsers = currentUser?.profile?.blockedUsers || [];
   // A string key so the profile-fetch effect below does not re-run on every
@@ -209,11 +215,32 @@ export default function Friends() {
     }
   };
 
-  const renderPerson = (profile, { key, meta, actions }) => (
+  const openNicknameEditor = profile => {
+    setNicknameTarget(profile);
+    setNicknameDraft(friendNicknameOf(currentUser?.profile, profile?.uid));
+    setError('');
+  };
+
+  const handleSaveNickname = async (clear = false) => {
+    const targetUid = nicknameTarget?.uid;
+    if (!uid || !targetUid) return;
+    setSavingNickname(true);
+    try {
+      await setFriendNickname(uid, targetUid, clear ? '' : nicknameDraft);
+      setNicknameTarget(null);
+    } catch (nicknameError) {
+      setError(nicknameError?.message || 'That nickname could not be saved.');
+    } finally {
+      setSavingNickname(false);
+    }
+  };
+
+  const renderPerson = (profile, { key, meta, actions, nickname }) => (
     <article key={key} className={styles.personCard}>
       <UserAvatar user={profile} size="2.75rem" />
       <div className={styles.personInfo}>
-        <strong>{profile?.displayName || 'User'}</strong>
+        <strong>{nickname || profile?.displayName || 'User'}</strong>
+        {nickname && <em className={styles.realName}>{profile?.displayName}</em>}
         <span className={meta?.playing ? styles.playingLine : ''}>{meta?.text || ''}</span>
       </div>
       <div className={styles.personActions}>{actions}</div>
@@ -256,11 +283,15 @@ export default function Friends() {
             return renderPerson(profile, {
               key: profile.uid,
               meta,
+              nickname: friendNicknameOf(currentUser?.profile, profile.uid),
               actions: (
                 <>
                   <button type="button" className={styles.primaryBtn} onClick={() => navigate(`/messages?user=${profile.uid}`)}>
                     <span className="material-symbols-outlined">chat</span>
                     <span>Message</span>
+                  </button>
+                  <button type="button" className={styles.ghostBtn} onClick={() => openNicknameEditor(profile)}>
+                    Nickname
                   </button>
                   <button type="button" className={styles.ghostBtn} disabled={busyUid === profile.uid} onClick={() => handleRemove(profile.uid)}>
                     Remove
@@ -385,6 +416,33 @@ export default function Friends() {
           </div>
         </section>
       )}
+
+      <Modal
+        isOpen={Boolean(nicknameTarget)}
+        onClose={() => setNicknameTarget(null)}
+        title="Private nickname"
+        footer={(
+          <>
+            <button type="button" className={styles.ghostBtn} onClick={() => handleSaveNickname(true)} disabled={savingNickname}>Clear</button>
+            <button type="button" className={styles.primaryBtn} onClick={() => handleSaveNickname()} disabled={savingNickname || !cleanNickname(nicknameDraft)}>
+              {savingNickname ? 'Saving...' : 'Save nickname'}
+            </button>
+          </>
+        )}
+      >
+        <div className={styles.nicknameForm}>
+          <label htmlFor="friend-nickname">WHAT YOU CALL THEM</label>
+          <input
+            id="friend-nickname"
+            value={nicknameDraft}
+            onChange={event => setNicknameDraft(event.target.value)}
+            placeholder={nicknameTarget?.displayName || 'Their display name'}
+            maxLength={NICKNAME_MAX_LENGTH}
+            autoFocus
+          />
+          <p className={styles.hint}>Only you see this, in your friends list and private messages. Their profile keeps their real name.</p>
+        </div>
+      </Modal>
     </div>
   );
 }

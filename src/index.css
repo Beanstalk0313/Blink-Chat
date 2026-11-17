@@ -271,3 +271,36 @@ html[data-reduced-motion="true"] *::after {
 html[data-reduced-motion="true"] {
   scroll-behavior: auto;
 }
+
+/* App-wide scrollbars: a quiet, themed thumb instead of the platform default,
+   which looked foreign against the Blink surfaces (channel lists, the message
+   list and sidebars all scroll). `.no-scrollbar` still wins by specificity. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-active) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--tint-active);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-outline-variant);
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

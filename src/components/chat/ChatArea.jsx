@@ -6,10 +6,14 @@ import {
   createChannel,
   deleteMessage,
   editMessage,
+  ensurePrivateConversation,
   getCachedMessages,
   getChannels,
   getCommunity,
   getSingleMessage,
+  getUserProfile,
+  privateConversationId,
+  sendPrivateMessage,
   sendMessage,
   subscribeToCommunityMembers,
   subscribeToMessages,
@@ -28,9 +32,17 @@ import {
   votePoll,
   updateLastRead,
   setCommunityMuted,
+  setCommunityNickname,
+  isUserOnline,
   compareMessages,
-  leaveCommunity
+  leaveCommunity,
+  updateChannel
 } from '../../services/db';
+import { cleanNickname, communityNicknameOf, friendNicknameOf, NICKNAME_MAX_LENGTH } from '../../services/nicknames';
+import { useMenuPresence } from '../../hooks/useMenuPresence';
+import { inviteLinkFor } from '../../services/invites';
+import { subscribeToFriends } from '../../services/friends';
+import MarkdownToolbar from '../common/MarkdownToolbar';
 import { uploadFile } from '../../services/upload';
 import { mentionsUser, filterCommunityMessage } from '../../services/utils';
 import { renderRichText } from '../../services/richText';
@@ -41,7 +53,7 @@ import Modal from '../common/Modal';
 import Dropdown from '../common/Dropdown';
 import CommunityBannedScreen from '../common/CommunityBannedScreen';
 import styles from './ChatArea.module.css';
-import { getMemberPermissions } from '../../services/permissions';
+import { getMemberPermissions, canAccessVoiceChannel, canInviteToVoiceChannel } from '../../services/permissions';
 import AppErrorScreen from '../common/AppErrorScreen';
 import GameMessage from './GameMessage';
 import RoleBadge from '../common/RoleBadge';
@@ -156,6 +168,8 @@ function ChatAreaContent() {
   const [isComposerMenuOpen, setIsComposerMenuOpen] = useState(false);
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameModalStep, setGameModalStep] = useState('opponent');
+  const [isVoiceInviteOpen, setIsVoiceInviteOpen] = useState(false);
+  const [voiceInviteError, setVoiceInviteError] = useState('');
   const [gameOpponent, setGameOpponent] = useState(null);
   const [pollQuestion, setPollQuestion] = useState('');
   const [pollOptions, setPollOptions] = useState(['', '']);
@@ -169,6 +183,19 @@ function ChatAreaContent() {
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [isMemberListOpen, setIsMemberListOpen] = useState(false);
   const [isPinnedMessagesOpen, setIsPinnedMessagesOpen] = useState(false);
+  const [isNicknameOpen, setIsNicknameOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [shareFriends, setShareFriends] = useState([]);
+  const [shareProfiles, setShareProfiles] = useState({});
+  const [sentInvites, setSentInvites] = useState(() => new Set());
+  const [shareBusyUid, setShareBusyUid] = useState(null);
+  const [shareError, setShareError] = useState('');
+  // Menus and the member pane stay mounted through their exit animation.
+  const notifMenuPresence = useMenuPresence(isNotifMenuOpen);
+  const searchPresence = useMenuPresence(isSearchOpen);
+  const memberPanePresence = useMenuPresence(isMemberListOpen, 180);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [savingNickname, setSavingNickname] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => window.innerWidth > 1024);
   const notificationPreferences = currentUser?.profile?.notificationPreferences || {};
   const communityMuted = Boolean(notificationPreferences.communityMuted?.[communityId]);
@@ -261,6 +288,10 @@ function ChatAreaContent() {
   const permissions = getMemberPermissions(community, currentUser?.uid);
   const canManageChannels = permissions.includes('manage_channels');
   const canManageMessages = permissions.includes('manage_messages');
+  // Restricted voice rooms are hidden from the sidebar for people who cannot
+  // see them, but the open room still resolves so it can explain the lock.
+  const visibleChannels = channels.filter(channel => canAccessVoiceChannel(community, channel, currentUser?.uid));
+
   const canOpenSettings = permissions.some(permission => ['manage_channels', 'manage_roles', 'manage_members', 'manage_community', 'manage_invites'].includes(permission));
   const currentUserDisplayName = currentUser?.profile?.displayName?.trim().toLowerCase();
   const assignedRoleValue = community?.memberRoles?.[currentUser?.uid];
@@ -835,6 +866,10 @@ function ChatAreaContent() {
 
   const handleJoinVoice = async () => {
     if (!currentChannel || currentChannel.type !== 'voice') return;
+    if (!canAccessVoiceChannel(community, currentChannel, currentUser?.uid)) {
+      setSendError('You need an invite or an allowed role to join this voice room.');
+      return;
+    }
     const participant = {
       channelId: currentChannel.id,
       uid: currentUser.uid,
@@ -846,6 +881,25 @@ function ChatAreaContent() {
       startCall(`${communityId}-${currentChannel.id}`, 'voice', participant);
     } catch (error) {
       setSendError(error?.message || 'Could not join the voice channel.');
+    }
+  };
+
+  // Invite-only rooms: members holding one of the room's inviter roles can add
+  // people to invitedUids, which makes the room visible to them.
+  const handleVoiceInvite = async uid => {
+    if (!currentChannel || !canInviteToVoiceChannel(community, currentChannel, currentUser?.uid)) return;
+    const invitedUids = {
+      ...(currentChannel.invitedUids || {}),
+      [uid]: { by: currentUser.uid }
+    };
+    try {
+      await updateChannel(currentChannel.id, { invitedUids });
+      setChannels(previous => previous.map(channel => (
+        channel.id === currentChannel.id ? { ...channel, invitedUids } : channel
+      )));
+      setVoiceInviteError('');
+    } catch (error) {
+      setVoiceInviteError(error?.message || 'Could not send the invite.');
     }
   };
 
@@ -877,23 +931,123 @@ function ChatAreaContent() {
     }
   };
 
-  const handleShare = async () => {
-    const url = `${window.location.origin}/join/${communityId}`;
+  // Private communities hand out a link that already contains the invite code,
+  // so a friend can join from it without typing anything.
+  const inviteUrl = typeof window === 'undefined'
+    ? ''
+    : inviteLinkFor({ origin: window.location.origin, communityId, community });
+
+  const handleShareLink = async () => {
     try {
-      if (navigator.share) await navigator.share({ title: community.name, text: `Join ${community.name} on Blink`, url });
+      if (navigator.share) await navigator.share({ title: community?.name || 'Blink', text: `Join ${community?.name || 'my community'} on Blink`, url: inviteUrl });
       else {
-        await navigator.clipboard.writeText(url);
-        window.alert('Community link copied to clipboard.');
+        await navigator.clipboard.writeText(inviteUrl);
+        window.alert('Community invite link copied to clipboard.');
       }
     } catch (error) {
       if (error?.name !== 'AbortError') console.error(error);
     }
   };
 
-  const authorFor = message => activeMembers.find(member => member.uid === message.authorUid) || {
-    uid: message.authorUid,
-    displayName: message.authorName || 'User',
-    avatarBase64: message.authorAvatar
+  const handleSendInvite = async friendUid => {
+    if (!currentUser?.uid || !friendUid) return;
+    setShareBusyUid(friendUid);
+    setShareError('');
+    try {
+      const conversationId = privateConversationId(currentUser.uid, friendUid);
+      const friend = shareProfiles[friendUid];
+      const participants = {
+        [currentUser.uid]: {
+          uid: currentUser.uid,
+          displayName: currentUser.profile?.displayName || 'User',
+          avatarBase64: currentUser.profile?.avatarBase64 || ''
+        },
+        [friendUid]: {
+          uid: friendUid,
+          displayName: friend?.displayName || 'Friend',
+          avatarBase64: friend?.avatarBase64 || ''
+        }
+      };
+      await ensurePrivateConversation(conversationId, currentUser.uid, friendUid, participants);
+      // The invite travels as data so the recipient sees an embed card, not a
+      // message with a link in it.
+      await sendPrivateMessage(
+        conversationId,
+        currentUser.uid,
+        friendUid,
+        `Shared ${community?.name || 'a community'}`,
+        participants,
+        null,
+        {
+          communityId,
+          name: community?.name || 'Community',
+          description: community?.description || '',
+          isPrivate: Boolean(community?.isPrivate),
+          joincode: community?.isPrivate ? community?.inviteCode || '' : ''
+        }
+      );
+      setSentInvites(previous => new Set(previous).add(friendUid));
+    } catch (error) {
+      setShareError(error?.message || 'That invite could not be sent.');
+    } finally {
+      setShareBusyUid(null);
+    }
+  };
+
+  // The share sheet only needs the friend list while it is open.
+  useEffect(() => {
+    if (!isShareOpen || !currentUser?.uid) return undefined;
+    return subscribeToFriends(currentUser.uid, setShareFriends);
+  }, [isShareOpen, currentUser?.uid]);
+
+  useEffect(() => {
+    if (!isShareOpen) return undefined;
+    const missing = shareFriends.filter(uid => !shareProfiles[uid]);
+    if (!missing.length) return undefined;
+    let cancelled = false;
+    Promise.all(missing.map(async uid => [uid, await getUserProfile(uid).catch(() => null)]))
+      .then(entries => {
+        if (cancelled) return;
+        const found = Object.fromEntries(entries.filter(([, profile]) => profile));
+        if (Object.keys(found).length) setShareProfiles(previous => ({ ...previous, ...found }));
+      });
+    return () => { cancelled = true; };
+  }, [isShareOpen, shareFriends, shareProfiles]);
+
+  const openNicknameEditor = () => {
+    setNicknameDraft(communityNicknameOf(currentUser?.profile, communityId));
+    setIsNicknameOpen(true);
+  };
+
+  const handleSaveNickname = async (clear = false) => {
+    if (!currentUser?.uid || !communityId) return;
+    setSavingNickname(true);
+    try {
+      await setCommunityNickname(currentUser.uid, communityId, clear ? '' : nicknameDraft);
+      setIsNicknameOpen(false);
+    } catch (error) {
+      setSendError(error?.message || 'Your nickname could not be saved.');
+    } finally {
+      setSavingNickname(false);
+    }
+  };
+
+  // Display-only overlay: the member object keeps the real display name so
+  // mentions, roles and profile lookups still resolve to the account. A private
+  // nickname the viewer gave someone wins over their community nickname.
+  const nameFor = member => friendNicknameOf(currentUser?.profile, member?.uid)
+    || communityNicknameOf(member, communityId)
+    || member?.displayName
+    || 'User';
+
+  const authorFor = message => {
+    const member = activeMembers.find(candidate => candidate.uid === message.authorUid) || {
+      uid: message.authorUid,
+      displayName: message.authorName || 'User',
+      avatarBase64: message.authorAvatar
+    };
+    const label = nameFor(member);
+    return label && label !== member.displayName ? { ...member, displayName: label } : member;
   };
   const visibleMessages = messages;
 
@@ -951,6 +1105,56 @@ function ChatAreaContent() {
   });
   const hasDraftMention = Boolean(newMessage && collectMentionRanges(newMessage, members, channels, community?.roles || {}).length);
 
+  // One renderer for the thread and the pinned-messages modal, so a pinned
+  // message looks exactly like it does in the conversation it came from.
+  const renderMessage = (message, { scope = 'channel' } = {}) => {
+    const anchorId = `${scope === 'pinned' ? 'blink-pinned-msg' : 'blink-msg'}-${message.id}`;
+    const author = authorFor(message);
+    const isMe = author.uid === currentUser.uid;
+    if (message.system) {
+      return <div key={message.id} className={styles.systemMessage}><span className="material-symbols-outlined">campaign</span><span>{message.system === 'join' ? `${message.name || 'Someone'} joined the community` : `${message.name || 'Someone'} left the community`}</span><time>{formatMessageTime(message.timestamp)}</time></div>;
+    }
+    const reactions = Object.entries(message.reactions || {})
+      .filter(([, uids]) => uids && typeof uids === 'object' && Object.keys(uids).length > 0)
+      .map(([emoji, uids]) => ({ emoji, uids: Object.keys(uids) }));
+    const poll = message.poll ? { ...message.poll, options: Object.values(message.poll.options || {}) } : null;
+    const myVote = poll ? poll.options.find(option => option.id && poll.votes?.[option.id]?.[currentUid])?.id || null : null;
+    const pollTotal = poll ? [...new Set(poll.options.flatMap(option => Object.keys(poll.votes?.[option.id] || {})))].length : 0;
+    return <article key={message.id} id={anchorId} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received} ${isMe && animatedMessageIds.has(message.id) ? styles.justSent : ''} ${highlightedMessageId === message.id ? styles.jumpHighlight : ''}`} onDoubleClick={() => { if (currentUid && !message.system) toggleReaction(channelId, message.id, '👍', currentUid, message.reactions?.['👍']?.[currentUid] === true).catch(() => {}); }}>
+      <button className={styles.messageAvatar} data-profile-trigger onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })} title={`Open ${author.displayName} profile`}><UserAvatar user={author} size="2.5rem" /></button>
+      {selectedProfile?.messageId === message.id && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}
+      <div className={styles.messageContent}>
+        <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined} onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</button><time>{formatMessageTime(message.timestamp)}</time>{message.isPinned && scope === 'channel' && <span className={styles.pinnedBadge} title="Pinned message"><span className="material-symbols-outlined">push_pin</span></span>}<div className={styles.messageActions}>
+          <button className={styles.msgActionBtn} onClick={() => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })} title="Reply"><span className="material-symbols-outlined">reply</span></button>
+          <button className={styles.msgActionBtn} onClick={() => setReactionMenuFor(reactionMenuFor === message.id ? null : message.id)} title="Add reaction"><span className="material-symbols-outlined">add_reaction</span></button>
+          {isMe && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}
+          {(isMe || canManageMessages) && <button className={styles.msgActionBtn} onClick={async () => { try { await deleteMessage(channelId, message.id); } catch (err) { console.error('Failed to delete message:', err); alert('Failed to delete message: ' + (err?.message || 'Permission denied')); } }} title="Delete message"><span className="material-symbols-outlined">delete</span></button>}
+          {canManageMessages && <button className={`${styles.msgPinBtn} ${message.isPinned ? styles.msgPinBtnActive : ''}`} onClick={() => handlePinMessage(message.id, message.isPinned)} title={message.isPinned ? 'Unpin message' : 'Pin message'} aria-pressed={Boolean(message.isPinned)}><span className="material-symbols-outlined">{message.isPinned ? 'keep_off' : 'push_pin'}</span></button>}
+        </div></div>
+        {editingMessageId === message.id ? <form className={styles.editForm} onSubmit={async event => { event.preventDefault(); await handleEditMessage(message.id, editingText); }}><input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus /><button type="submit">Save</button></form> : <>
+          {message.replyTo && <button type="button" className={styles.replyQuote} onClick={() => { if (scope === 'pinned') setIsPinnedMessagesOpen(false); jumpToMessage(message.replyTo.id); }} title="Jump to message"><span className="material-symbols-outlined">format_quote</span><span className={styles.replyQuoteBody}><strong>{message.replyTo.authorName || 'User'}</strong><span>{message.replyTo.text || 'Attachment'}</span></span></button>}
+          {message.text && <div className={styles.messageBubble}>{renderMessageText(message.text, message.id)}</div>}
+          {message.game && <GameMessage message={{ ...message, channelId }} currentUid={currentUid} />}
+          {poll && <div className={styles.pollCard}>
+            <strong className={styles.pollQuestion}>{poll.question}</strong>
+            <div className={styles.pollOptions}>
+              {poll.options.map(option => {
+                const optionVotes = option.id ? Object.keys(poll.votes?.[option.id] || {}) : [];
+                const voted = optionVotes.includes(currentUid);
+                const percentage = pollTotal ? Math.round((optionVotes.length / pollTotal) * 100) : 0;
+                return <button key={option.id} type="button" className={`${styles.pollOption} ${voted ? styles.pollOptionVoted : ''}`} onClick={() => votePoll(channelId, message.id, option.id, currentUid, myVote).catch(() => {})}><span className={styles.pollOptionText}>{option.text}</span><span className={styles.pollOptionCount}>{optionVotes.length} · {percentage}%</span><span className={styles.pollBar} style={{ width: `${percentage}%` }} /></button>;
+              })}
+            </div>
+            <small className={styles.pollMeta}>{pollTotal} {pollTotal === 1 ? 'vote' : 'votes'}</small>
+          </div>}
+          {(message.attachment || message.fileUrl) && <div className={styles.fileCard}><span className="material-symbols-outlined">description</span><span>{message.attachment?.name || message.fileName || 'Attachment'}</span><a href={message.attachment?.url || message.fileUrl} target="_blank" rel="noreferrer" title="Open attachment"><span className="material-symbols-outlined">download</span></a></div>}
+          {reactionMenuFor === message.id && <div className={styles.reactionMenu}>{EMOJI_CHOICES.map(emoji => <button key={emoji} type="button" className={message.reactions?.[emoji]?.[currentUid] === true ? styles.reactionMenuActive : ''} onClick={() => { toggleReaction(channelId, message.id, emoji, currentUid, message.reactions?.[emoji]?.[currentUid] === true).catch(() => {}); setReactionMenuFor(null); }}>{emoji}</button>)}</div>}
+          {reactions.length > 0 && <div className={styles.reactionRow}>{reactions.map(({ emoji, uids }) => <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(currentUid) ? styles.reactionChipActive : ''}`} title={uids.map(uid => authorFor({ authorUid: uid }).displayName).join(', ')} onClick={() => toggleReaction(channelId, message.id, emoji, currentUid, uids.includes(currentUid)).catch(() => {})}><span>{emoji}</span><span>{uids.length}</span></button>)}</div>}
+        </>}
+      </div>
+    </article>;
+  };
+
   const typingLabel = (() => {
     const names = Object.values(typingUsers).map(entry => entry?.name).filter(Boolean);
     if (!names.length) return '';
@@ -970,11 +1174,15 @@ function ChatAreaContent() {
       <aside className={`${styles.innerSidebar} ${!isSidebarOpen ? styles.closed : ''}`}>
         <div className={styles.sidebarHeader}>
           <div className={styles.communityHeading}><h2>{community.name}</h2><p>{community.description || 'No description'}</p></div>
-          <div className={styles.communityActions}><button className={styles.pinBtn} onClick={handleShare} title="Share community"><span className="material-symbols-outlined">share</span></button><button className={`${styles.pinBtn} ${currentUser.profile?.pinnedCommunities?.includes(communityId) ? styles.pinned : ''}`} onClick={() => togglePinCommunity(currentUser.uid, communityId)} title="Pin community"><span className="material-symbols-outlined">push_pin</span></button></div>
         </div>
         <div className={styles.channelList}>
           <div className={styles.sectionHeader}><span className="text-label-sm text-tertiary">CHANNELS</span>{canManageChannels && <button className={styles.addChannelBtn} onClick={() => setIsCreateChannelOpen(true)} title="Create channel"><span className="material-symbols-outlined">add</span></button>}</div>
-          {channels.map(channel => <div key={channel.id} className={`${styles.channelRow} ${draggedChannelId === channel.id ? styles.dragging : ''} ${dropTarget?.id === channel.id ? (dropTarget.before ? styles.dropBefore : styles.dropAfter) : ''}`} draggable={canManageChannels} onDragStart={event => handleChannelDragStart(event, channel.id)} onDragOver={event => handleChannelDragOver(event, channel.id)} onDrop={handleChannelDrop} onDragEnd={handleChannelDragEnd} onDragLeave={() => setDropTarget(previous => previous?.id === channel.id ? null : previous)}><div className={styles.channelEntry}><Link to={`/channels/${communityId}/${channel.id}`} onClick={() => window.innerWidth <= 1024 && setIsSidebarOpen(false)} className={`${styles.channelItem} ${channel.id === currentChannel?.id ? styles.active : ''}`}>{canManageChannels && <span className="material-symbols-outlined channelDragHandle" aria-hidden="true">drag_indicator</span>}<span className="material-symbols-outlined">{channel.type === 'voice' ? 'graphic_eq' : 'tag'}</span><span>{channel.name}</span></Link></div>{channel.type === 'voice' && <div className={styles.voiceRoster}>{participantsFor(channel).map(participant => <div className={styles.voiceParticipant} key={participant.uid}><UserAvatar user={participant} size="1.5rem" /><span>{participant.uid === currentUser.uid ? `${participant.displayName} (You)` : participant.displayName}</span></div>)}</div>}</div>)}
+          {visibleChannels.map(channel => <div key={channel.id} className={`${styles.channelRow} ${draggedChannelId === channel.id ? styles.dragging : ''} ${dropTarget?.id === channel.id ? (dropTarget.before ? styles.dropBefore : styles.dropAfter) : ''}`} draggable={canManageChannels} onDragStart={event => handleChannelDragStart(event, channel.id)} onDragOver={event => handleChannelDragOver(event, channel.id)} onDrop={handleChannelDrop} onDragEnd={handleChannelDragEnd} onDragLeave={() => setDropTarget(previous => previous?.id === channel.id ? null : previous)}><div className={styles.channelEntry}><Link to={`/channels/${communityId}/${channel.id}`} onClick={() => window.innerWidth <= 1024 && setIsSidebarOpen(false)} className={`${styles.channelItem} ${channel.id === currentChannel?.id ? styles.active : ''}`}>{canManageChannels && <span className="material-symbols-outlined channelDragHandle" aria-hidden="true">drag_indicator</span>}<span className="material-symbols-outlined">{channel.type === 'voice' ? 'graphic_eq' : 'tag'}</span><span>{channel.name}</span></Link></div>{channel.type === 'voice' && <div className={styles.voiceRoster}>{participantsFor(channel).map(participant => <div className={styles.voiceParticipant} key={participant.uid}><UserAvatar user={participant} size="1.5rem" /><span>{participant.uid === currentUser.uid ? `${friendNicknameOf(currentUser?.profile, participant.uid) || participant.displayName} (You)` : (friendNicknameOf(currentUser?.profile, participant.uid) || participant.displayName)}</span></div>)}</div>}</div>)}
+        </div>
+        <div className={styles.communityTools}>
+          <button type="button" className={styles.communityTool} onClick={openNicknameEditor} title="Set your nickname in this community"><span className="material-symbols-outlined">badge</span><span>Nickname</span></button>
+          <button type="button" className={styles.communityTool} onClick={() => { setShareError(''); setIsShareOpen(true); }} title="Share community"><span className="material-symbols-outlined">share</span><span>Share</span></button>
+          <button type="button" className={`${styles.communityTool} ${currentUser.profile?.pinnedCommunities?.includes(communityId) ? styles.communityToolActive : ''}`} onClick={() => togglePinCommunity(currentUser.uid, communityId)} title={currentUser.profile?.pinnedCommunities?.includes(communityId) ? 'Unpin community' : 'Pin community'}><span className="material-symbols-outlined">push_pin</span><span>{currentUser.profile?.pinnedCommunities?.includes(communityId) ? 'Pinned' : 'Pin'}</span></button>
         </div>
         <div className={styles.userStatus}><Link to="/profile" className={styles.userInfo}><div className={styles.avatarWrapper}><UserAvatar user={currentUser.profile} size="2.5rem" /><span className={`${styles.statusDot} ${styles.online}`} /></div><div className={styles.userDetails}><strong>{currentUser.profile?.displayName || 'User'}</strong><span>{currentUser.profile?.status || 'Online'}</span></div></Link></div>
       </aside>
@@ -985,7 +1193,7 @@ function ChatAreaContent() {
           <div className={styles.headerActions}>
             <div className={styles.notifMenuWrap} ref={notifMenuRef}>
               <button className={`${styles.iconBtn} ${isNotifMenuOpen || isMuted ? styles.active : ''}`} onClick={() => setIsNotifMenuOpen(previous => !previous)} title="Notification settings"><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications'}</span></button>
-              {isNotifMenuOpen && <div className={styles.notifMenu}>
+              {notifMenuPresence.mounted && <div className={`${styles.notifMenu} ${notifMenuPresence.closing ? styles.menuPopoverClosing : ''}`}>
                 <p className="text-label-sm text-tertiary">NOTIFICATIONS FOR #{currentChannel?.name}</p>
                 {[{ mode: 'all', label: 'All messages' }, { mode: 'mentions', label: 'Mentions only' }, { mode: 'none', label: 'Nothing' }].map(option => (
                   <button key={option.mode} type="button" className={`${styles.notifMenuOption} ${channelNotificationMode === option.mode ? styles.active : ''}`} onClick={() => handleNotificationModeChange(option.mode)}><span className="material-symbols-outlined">{channelNotificationMode === option.mode ? 'radio_button_checked' : 'radio_button_unchecked'}</span>{option.label}</button>
@@ -996,7 +1204,7 @@ function ChatAreaContent() {
             </div>
             <div className={styles.searchWrap}>
               <button className={`${styles.iconBtn} ${isSearchOpen ? styles.active : ''}`} onClick={() => setIsSearchOpen(previous => !previous)} title="Search messages"><span className="material-symbols-outlined">search</span></button>
-              {isSearchOpen && <div className={styles.searchPanel}>
+              {searchPresence.mounted && <div className={`${styles.searchPanel} ${searchPresence.closing ? styles.menuPopoverClosing : ''}`}>
                 <input className={styles.headerSearch} value={searchQuery} onChange={handleSearchChange} placeholder="Search messages" aria-label="Search messages" autoFocus />
                 {isSearchFetching && <div className={styles.searchHint}><span className="material-symbols-outlined">progress_activity</span>Searching more messages…</div>}
                 <div className={styles.searchResults}>
@@ -1013,58 +1221,14 @@ function ChatAreaContent() {
           </div>
         </header>
 
-        {currentChannel?.type === 'voice' ? <><div className={styles.voiceEmpty}>{activeCall?.roomId !== `${communityId}-${currentChannel.id}` && <div className={styles.voicePanel}><div className={styles.voicePanelContent}><span className="material-symbols-outlined">graphic_eq</span><h2>Voice channel</h2><p>Join the room to talk with your community.</p><div className={styles.voiceRoomRoster}>{participantsFor(currentChannel).length ? participantsFor(currentChannel).map(participant => <div className={styles.voiceRoomPerson} key={participant.uid}><UserAvatar user={participant} size="3rem" /><span>{participant.uid === currentUser.uid ? `${participant.displayName} (You)` : participant.displayName}</span></div>) : <span className={styles.emptyVoiceRoster}>No one is in the room yet.</span>}</div><button className={styles.joinVoiceBtn} onClick={handleJoinVoice}><span className="material-symbols-outlined">headset_mic</span>Join voice channel</button></div></div>}</div></> : <>
+        {currentChannel?.type === 'voice' ? (canAccessVoiceChannel(community, currentChannel, currentUser?.uid) ? <><div className={styles.voiceEmpty}>{activeCall?.roomId !== `${communityId}-${currentChannel.id}` && <div className={styles.voicePanel}><div className={styles.voicePanelContent}><span className="material-symbols-outlined">graphic_eq</span><h2>Voice channel</h2><p>Join the room to talk with your community.</p><div className={styles.voiceRoomRoster}>{participantsFor(currentChannel).length ? participantsFor(currentChannel).map(participant => <div className={styles.voiceRoomPerson} key={participant.uid}><UserAvatar user={participant} size="3rem" /><span>{participant.uid === currentUser.uid ? `${friendNicknameOf(currentUser?.profile, participant.uid) || participant.displayName} (You)` : (friendNicknameOf(currentUser?.profile, participant.uid) || participant.displayName)}</span></div>) : <span className={styles.emptyVoiceRoster}>No one is in the room yet.</span>}</div><button className={styles.joinVoiceBtn} onClick={handleJoinVoice}><span className="material-symbols-outlined">headset_mic</span>Join voice channel</button>{canInviteToVoiceChannel(community, currentChannel, currentUser?.uid) && <button className={styles.voiceInviteBtn} onClick={() => { setVoiceInviteError(''); setIsVoiceInviteOpen(true); }}><span className="material-symbols-outlined">person_add</span>Invite someone</button>}</div></div>}</div></> : <div className={styles.voiceEmpty}><div className={styles.voicePanel}><div className={styles.voicePanelContent}><span className="material-symbols-outlined">lock</span><h2>Restricted room</h2><p>This room is invite-only or limited to certain roles. Ask someone with an inviter role for an invite.</p></div></div></div>) : <>
           <div ref={messagesListRef} className={styles.messageList}>
             {messages.length >= messageLimit && <button className={styles.loadMoreBtn} onClick={() => setMessageLimit(previous => previous + 25)}>Load older messages</button>}
-            {visibleMessages.map(message => {
-              const author = authorFor(message);
-              const isMe = author.uid === currentUser.uid;
-              if (message.system) {
-                return <div key={message.id} className={styles.systemMessage}><span className="material-symbols-outlined">campaign</span><span>{message.system === 'join' ? `${message.name || 'Someone'} joined the community` : `${message.name || 'Someone'} left the community`}</span><time>{formatMessageTime(message.timestamp)}</time></div>;
-              }
-              const reactions = Object.entries(message.reactions || {})
-                .filter(([, uids]) => uids && typeof uids === 'object' && Object.keys(uids).length > 0)
-                .map(([emoji, uids]) => ({ emoji, uids: Object.keys(uids) }));
-              const poll = message.poll ? { ...message.poll, options: Object.values(message.poll.options || {}) } : null;
-              const myVote = poll ? poll.options.find(option => option.id && poll.votes?.[option.id]?.[currentUid])?.id || null : null;
-              const pollTotal = poll ? [...new Set(poll.options.flatMap(option => Object.keys(poll.votes?.[option.id] || {})))].length : 0;
-              return <article key={message.id} id={`blink-msg-${message.id}`} className={`${styles.messageItem} ${isMe ? styles.sent : styles.received} ${isMe && animatedMessageIds.has(message.id) ? styles.justSent : ''} ${highlightedMessageId === message.id ? styles.jumpHighlight : ''}`} onDoubleClick={() => { if (currentUid && !message.system) toggleReaction(channelId, message.id, '👍', currentUid, message.reactions?.['👍']?.[currentUid] === true).catch(() => {}); }}>
-                <button className={styles.messageAvatar} data-profile-trigger onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })} title={`Open ${author.displayName} profile`}><UserAvatar user={author} size="2.5rem" /></button>
-                {selectedProfile?.messageId === message.id && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}
-                <div className={styles.messageContent}>
-                  <div className={styles.messageHeader}><button className={styles.authorButton} data-profile-trigger style={primaryRoleForMember(community, author.uid)?.color ? { color: primaryRoleForMember(community, author.uid).color } : undefined} onClick={event => setSelectedProfile(selectedProfile?.messageId === message.id ? null : { messageId: message.id, user: author, anchor: event.currentTarget })}><RoleBadge role={primaryRoleForMember(community, author.uid)} />{author.displayName}</button><time>{formatMessageTime(message.timestamp)}</time><div className={styles.messageActions}>
-                    <button className={styles.msgActionBtn} onClick={() => setReplyingTo({ id: message.id, authorUid: author.uid, authorName: author.displayName, text: (message.text || '').slice(0, 200) })} title="Reply"><span className="material-symbols-outlined">reply</span></button>
-                    <button className={styles.msgActionBtn} onClick={() => setReactionMenuFor(reactionMenuFor === message.id ? null : message.id)} title="Add reaction"><span className="material-symbols-outlined">add_reaction</span></button>
-                    {isMe && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}
-                    {(isMe || canManageMessages) && <button className={styles.msgActionBtn} onClick={async () => { try { await deleteMessage(channelId, message.id); } catch (err) { console.error('Failed to delete message:', err); alert('Failed to delete message: ' + (err?.message || 'Permission denied')); } }} title="Delete message"><span className="material-symbols-outlined">delete</span></button>}
-                    {canManageMessages && <button className={styles.msgPinBtn} onClick={() => handlePinMessage(message.id, message.isPinned)} title="Pin message"><span className="material-symbols-outlined">push_pin</span></button>}
-                  </div></div>
-                  {editingMessageId === message.id ? <form className={styles.editForm} onSubmit={async event => { event.preventDefault(); await handleEditMessage(message.id, editingText); }}><input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus /><button type="submit">Save</button></form> : <>
-                    {message.replyTo && <button type="button" className={styles.replyQuote} onClick={() => jumpToMessage(message.replyTo.id)} title="Jump to message"><span className="material-symbols-outlined">format_quote</span><span className={styles.replyQuoteBody}><strong>{message.replyTo.authorName || 'User'}</strong><span>{message.replyTo.text || 'Attachment'}</span></span></button>}
-                    {message.text && <div className={styles.messageBubble}>{renderMessageText(message.text, message.id)}</div>}
-                    {message.game && <GameMessage message={{ ...message, channelId }} currentUid={currentUid} />}
-                    {poll && <div className={styles.pollCard}>
-                      <strong className={styles.pollQuestion}>{poll.question}</strong>
-                      <div className={styles.pollOptions}>
-                        {poll.options.map(option => {
-                          const optionVotes = option.id ? Object.keys(poll.votes?.[option.id] || {}) : [];
-                          const voted = optionVotes.includes(currentUid);
-                          const percentage = pollTotal ? Math.round((optionVotes.length / pollTotal) * 100) : 0;
-                          return <button key={option.id} type="button" className={`${styles.pollOption} ${voted ? styles.pollOptionVoted : ''}`} onClick={() => votePoll(channelId, message.id, option.id, currentUid, myVote).catch(() => {})}><span className={styles.pollOptionText}>{option.text}</span><span className={styles.pollOptionCount}>{optionVotes.length} · {percentage}%</span><span className={styles.pollBar} style={{ width: `${percentage}%` }} /></button>;
-                        })}
-                      </div>
-                      <small className={styles.pollMeta}>{pollTotal} {pollTotal === 1 ? 'vote' : 'votes'}</small>
-                    </div>}
-                    {(message.attachment || message.fileUrl) && <div className={styles.fileCard}><span className="material-symbols-outlined">description</span><span>{message.attachment?.name || message.fileName || 'Attachment'}</span><a href={message.attachment?.url || message.fileUrl} target="_blank" rel="noreferrer" title="Open attachment"><span className="material-symbols-outlined">download</span></a></div>}
-                    {reactionMenuFor === message.id && <div className={styles.reactionMenu}>{EMOJI_CHOICES.map(emoji => <button key={emoji} type="button" className={message.reactions?.[emoji]?.[currentUid] === true ? styles.reactionMenuActive : ''} onClick={() => { toggleReaction(channelId, message.id, emoji, currentUid, message.reactions?.[emoji]?.[currentUid] === true).catch(() => {}); setReactionMenuFor(null); }}>{emoji}</button>)}</div>}
-                    {reactions.length > 0 && <div className={styles.reactionRow}>{reactions.map(({ emoji, uids }) => <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(currentUid) ? styles.reactionChipActive : ''}`} title={uids.map(uid => authorFor({ authorUid: uid }).displayName).join(', ')} onClick={() => toggleReaction(channelId, message.id, emoji, currentUid, uids.includes(currentUid)).catch(() => {})}><span>{emoji}</span><span>{uids.length}</span></button>)}</div>}
-                  </>}
-                </div>
-              </article>;
-            })}
+            {visibleMessages.map(message => renderMessage(message))}
             <div ref={messagesEndRef} />
           </div>
           <div className={styles.inputArea}>
+            <MarkdownToolbar inputRef={messageInputRef} value={newMessage} onChange={setNewMessage} disabled={!canSend || isUploading} />
             {sendError && <p className={styles.sendError} role="alert">{sendError}</p>}
             {typingLabel && <div className={styles.typingIndicator}><span className={styles.typingDots}><i /><i /><i /></span><span>{typingLabel}</span></div>}
             {replyingTo && <div className={styles.replyBar}><span className="material-symbols-outlined">reply</span><span className={styles.replyBarBody}><strong>Replying to {replyingTo.authorName}</strong><span>{replyingTo.text || 'Attachment'}</span></span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setReplyingTo(null)} title="Cancel reply"><span className="material-symbols-outlined">close</span></button></div>}
@@ -1074,7 +1238,22 @@ function ChatAreaContent() {
         </>}
       </section>
 
-      {isMemberListOpen && <aside className={styles.memberListSidebar}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={event => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member, anchor: event.currentTarget }); }}><UserAvatar user={member} size="2rem" /><span>{member.displayName}</span><span className={`${styles.statusDot} ${presence[member.uid] ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
+      {memberPanePresence.mounted && <aside className={`${styles.memberListSidebar} ${memberPanePresence.closing ? styles.memberListSidebarClosing : ''}`}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={event => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member, anchor: event.currentTarget }); }}><UserAvatar user={member} size="2rem" /><span>{nameFor(member)}</span><span className={`${styles.statusDot} ${isUserOnline(presence[member.uid]) ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
+
+      <Modal isOpen={isVoiceInviteOpen} onClose={() => setIsVoiceInviteOpen(false)} title={`Invite to ${currentChannel?.name || 'voice room'}`}>
+        <p className={styles.inviteHint}>Invited members can see and join this room.</p>
+        {voiceInviteError && <p className={styles.sendError} role="alert">{voiceInviteError}</p>}
+        <div className={styles.inviteList}>
+          {members.filter(member => member.uid !== currentUser?.uid && !currentChannel?.invitedUids?.[member.uid]).map(member => (
+            <button type="button" key={member.uid} className={styles.inviteRow} onClick={() => handleVoiceInvite(member.uid)}>
+              <UserAvatar user={member} size="2rem" />
+              <span>{friendNicknameOf(currentUser?.profile, member.uid) || member.displayName}</span>
+              <span className="material-symbols-outlined">person_add</span>
+            </button>
+          ))}
+          {!members.some(member => member.uid !== currentUser?.uid && !currentChannel?.invitedUids?.[member.uid]) && <p className={styles.emptyVoiceRoster}>Everyone has already been invited.</p>}
+        </div>
+      </Modal>
 
       <Modal isOpen={gameModalOpen} onClose={() => setGameModalOpen(false)} title={gameModalStep === 'opponent' ? 'Choose an opponent' : `Choose a game vs ${gameOpponent?.displayName || '…'}`}>
         {gameModalStep === 'opponent' ? (
@@ -1082,7 +1261,7 @@ function ChatAreaContent() {
             {activeMembers.filter(member => member.uid !== currentUid).slice(0, 24).map(member => (
               <button type="button" key={member.uid} className={styles.gameChoiceBtn} onClick={() => { setGameOpponent(member); setGameModalStep('game'); }}>
                 <UserAvatar user={member} size="2rem" />
-                <span>{member.displayName}</span>
+                <span>{nameFor(member)}</span>
               </button>
             ))}
           </div>
@@ -1099,7 +1278,32 @@ function ChatAreaContent() {
 
       <Modal isOpen={isPollOpen} onClose={() => setIsPollOpen(false)} title="Create poll" footer={<><button className={styles.modalCancel} onClick={() => setIsPollOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreatePoll} disabled={!pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2}>Create poll</button></>}><div className={styles.modalInputGroup}><label>QUESTION</label><input className={styles.modalInput} value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} placeholder="What do you want to know?" autoFocus /><label>OPTIONS (2–6)</label>{pollOptions.map((option, index) => <div className={styles.pollOptionRow} key={index}><input className={styles.modalInput} value={option} onChange={event => setPollOptions(previous => previous.map((value, optionIndex) => optionIndex === index ? event.target.value : value))} placeholder={`Option ${index + 1}`} />{pollOptions.length > 2 && <button type="button" className={styles.removeAttachmentBtn} onClick={() => setPollOptions(previous => previous.filter((_, optionIndex) => optionIndex !== index))} title="Remove option"><span className="material-symbols-outlined">close</span></button>}</div>)}{pollOptions.length < 6 && <button type="button" className={styles.modalCancel} onClick={() => setPollOptions(previous => [...previous, ''])}>Add option</button>}</div></Modal>
       <Modal isOpen={isCreateChannelOpen} onClose={() => setIsCreateChannelOpen(false)} title="Create channel" footer={<><button className={styles.modalCancel} onClick={() => setIsCreateChannelOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreateChannel}>Create</button></>}><div className={styles.modalInputGroup}><label>CHANNEL NAME</label><input className={styles.modalInput} value={newChannelName} onChange={event => setNewChannelName(event.target.value)} autoFocus /><label>CHANNEL TYPE</label><Dropdown value={newChannelType} onChange={setNewChannelType} options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]} /></div></Modal>
-      <Modal isOpen={isPinnedMessagesOpen} onClose={() => setIsPinnedMessagesOpen(false)} title="Pinned messages" footer={<button className={styles.modalConfirm} onClick={() => setIsPinnedMessagesOpen(false)}>Close</button>}><div className={styles.pinnedList}>{pinnedMessages.length ? pinnedMessages.map(message => { const pinnedAuthor = authorFor(message); const pinnedRole = primaryRoleForMember(community, message.authorUid); return <div className={styles.pinnedMsgItem} key={message.id}><strong style={pinnedRole?.color ? { color: pinnedRole.color } : undefined}><RoleBadge role={pinnedRole} />{pinnedAuthor.displayName}</strong><div className={styles.pinnedMsgText}>{message.text ? renderMessageText(message.text, message.id) : <span className="text-tertiary">Attachment</span>}</div></div>; }) : <p className="text-tertiary">No pinned messages in this channel.</p>}</div></Modal>
+      <Modal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} title={`Share ${community?.name || 'community'}`} footer={<button className={styles.modalCancel} onClick={() => setIsShareOpen(false)}>Close</button>}>
+        <div className={styles.shareBody}>
+          <button type="button" className={styles.shareOption} onClick={handleShareLink}>
+            <span className="material-symbols-outlined">link</span>
+            <span className={styles.shareOptionText}><strong>Share the invite link</strong><small>{navigator.share ? 'Open your device\u2019s share sheet' : 'Copy the link to your clipboard'}</small></span>
+          </button>
+          <p className={styles.shareSectionLabel}>OR SEND IT TO A FRIEND</p>
+          {shareFriends.length ? shareFriends.map(friendUid => {
+            const friend = shareProfiles[friendUid];
+            const sent = sentInvites.has(friendUid);
+            return (
+              <div key={friendUid} className={styles.shareFriendRow}>
+                <UserAvatar user={friend || { displayName: 'Friend' }} size="2rem" />
+                <span className={styles.shareFriendName}>{friend?.displayName || 'Friend'}</span>
+                <button type="button" className={styles.shareSendBtn} disabled={shareBusyUid === friendUid || sent} onClick={() => handleSendInvite(friendUid)}>
+                  {sent ? 'Invite sent' : shareBusyUid === friendUid ? 'Sending...' : 'Send invite'}
+                </button>
+              </div>
+            );
+          }) : <p className={styles.shareHint}>Add a friend first, then you can invite them in one click.</p>}
+          {shareError && <p className={styles.shareError}>{shareError}</p>}
+          <p className={styles.shareHint}>{community?.isPrivate ? 'The link already contains this community\u2019s invite code, so whoever you send it to joins without typing it.' : 'Anyone with the link can join this community.'}</p>
+        </div>
+      </Modal>
+      <Modal isOpen={isNicknameOpen} onClose={() => setIsNicknameOpen(false)} title="Your nickname" footer={<><button className={styles.modalCancel} onClick={() => setIsNicknameOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={() => handleSaveNickname()} disabled={savingNickname || !cleanNickname(nicknameDraft)}>{savingNickname ? 'Saving...' : 'Save'}</button></>}><div className={styles.modalInputGroup}><label>NICKNAME IN {String(community?.name || 'this community').toUpperCase()}</label><input className={styles.modalInput} value={nicknameDraft} onChange={event => setNicknameDraft(event.target.value)} placeholder={currentUser?.profile?.displayName || 'Your display name'} maxLength={NICKNAME_MAX_LENGTH} autoFocus /><p className={styles.nicknameHint}>Shown on your messages and in the member list of this community only. Your mentions and account name stay the same.</p><button type="button" className={styles.modalCancel} onClick={() => handleSaveNickname(true)} disabled={savingNickname}>Clear nickname</button></div></Modal>
+      <Modal wide isOpen={isPinnedMessagesOpen} onClose={() => setIsPinnedMessagesOpen(false)} title="Pinned messages" footer={<button className={styles.modalConfirm} onClick={() => setIsPinnedMessagesOpen(false)}>Close</button>}><div className={styles.pinnedList}>{pinnedMessages.length ? pinnedMessages.map(message => <div className={styles.pinnedItem} key={message.id}>{renderMessage(message, { scope: 'pinned' })}</div>) : <p className={styles.pinnedEmpty}>No pinned messages in this channel.</p>}</div></Modal>
     </div>
   );
 }

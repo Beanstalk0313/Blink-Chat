@@ -15,6 +15,22 @@
   animation: popIn 0.18s ease;
 }
 
+/* Dismissal animates out before the card unmounts. */
+.popoverClosing {
+  animation: popOut 0.13s ease-in both;
+}
+
+@keyframes popOut {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+}
+
 @keyframes popIn {
   from {
     opacity: 0;

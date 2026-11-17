@@ -27,6 +27,18 @@ export default function ProfilePopover({ user, isOwnProfile, onClose, anchor }) 
   const [relationship, setRelationship] = useState({ state: 'unknown' });
   const [requestState, setRequestState] = useState({ busy: false, error: '' });
   const [blockBusy, setBlockBusy] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closeTimer = useRef(0);
+
+  // The card animates out on the way and only then unmounts. Everything that
+  // dismisses it (Escape, a click outside) goes through here.
+  const requestClose = useCallback(() => {
+    setClosing(true);
+    window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => onClose?.(), 130);
+  }, [onClose]);
+
+  useEffect(() => () => window.clearTimeout(closeTimer.current), []);
 
   const position = useCallback(() => {
     const popover = popoverRef.current;
@@ -56,10 +68,22 @@ export default function ProfilePopover({ user, isOwnProfile, onClose, anchor }) 
   }, [position]);
 
   useEffect(() => {
-    const handleKeyDown = event => { if (event.key === 'Escape') onClose?.(); };
+    const handleKeyDown = event => { if (event.key === 'Escape') requestClose(); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [requestClose]);
+
+  // A pointer press anywhere outside the card — and outside the avatar that
+  // opened it, so that avatar keeps toggling — dismisses it.
+  useEffect(() => {
+    const handlePointerDown = event => {
+      if (popoverRef.current?.contains(event.target)) return;
+      if (anchor?.contains?.(event.target)) return;
+      requestClose();
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [requestClose, anchor]);
 
   // Live presence, including the game the desktop app reports.
   useEffect(() => {
@@ -139,7 +163,7 @@ export default function ProfilePopover({ user, isOwnProfile, onClose, anchor }) 
       : 'Offline';
 
   return createPortal(
-    <div ref={popoverRef} className={styles.popover} data-profile-popover role="dialog" aria-label={`${user.displayName || 'User'} profile`}>
+    <div ref={popoverRef} className={`${styles.popover} ${closing ? styles.popoverClosing : ''}`} data-profile-popover role="dialog" aria-label={`${user.displayName || 'User'} profile`}>
       <div className={styles.header}>
         <UserAvatar user={user} size="3.5rem" />
         <div>
