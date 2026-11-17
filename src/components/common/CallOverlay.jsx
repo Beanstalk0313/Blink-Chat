@@ -27,8 +27,14 @@ export default function CallOverlay() {
   const navigate = useNavigate();
   // expanded -> big view (only shown on the voice channel's page).
   // minimized -> collapsed to the bottom-left pill; the call keeps running.
-  const [expanded, setExpanded] = useState(true);
+  // Private calls open as the floating window and expand on demand; community
+  // voice channels open full width on their own page as before.
+  const [expanded, setExpanded] = useState(() => !activeCall?.roomId?.startsWith('pm-'));
   const [minimized, setIsMinimized] = useState(false);
+
+  // Private calls use `pm-<conversationId>` rooms with no channel page of their
+  // own, so they expand over the current page instead of navigating to it.
+  const isPrivateCall = Boolean(activeCall?.roomId?.startsWith('pm-'));
 
   const { communityId, channelId } = useMemo(
     () => (activeCall ? splitRoomId(activeCall.roomId) : { communityId: '', channelId: '' }),
@@ -36,28 +42,30 @@ export default function CallOverlay() {
   );
 
   const onVoicePage = useMemo(() => {
-    if (!channelId) return false;
+    if (isPrivateCall || !channelId) return false;
     return location.pathname === `/channels/${communityId}/${channelId}`;
-  }, [communityId, channelId, location.pathname]);
+  }, [communityId, channelId, isPrivateCall, location.pathname]);
 
   if (!activeCall) return null;
 
-  const showBig = expanded && onVoicePage;
+  const showBig = expanded && (isPrivateCall || onVoicePage);
   const containerClass = [
     styles.overlay,
-    minimized ? styles.minimized : showBig ? styles.pane : styles.mini,
+    minimized ? styles.minimized : showBig ? (isPrivateCall ? styles.privatePane : styles.pane) : styles.mini,
   ].filter(Boolean).join(' ');
   const mirotalkUrl = `https://p2p.mirotalk.com/join/${activeCall.roomId}`;
 
   const expandToBig = () => {
-    if (!onVoicePage && channelId) navigate(`/channels/${communityId}/${channelId}`);
+    // Only community voice channels have a page to fill; a private call stays on
+    // the page you are on (navigating to a `pm-…` room would load a dead route).
+    if (!isPrivateCall && !onVoicePage && channelId) navigate(`/channels/${communityId}/${channelId}`);
     setExpanded(true);
   };
 
   return (
     <div className={containerClass}>
       <div className={styles.header}>
-        <div className={styles.info}><span className="material-symbols-outlined">headset_mic</span><span className="text-label-md">Voice channel</span></div>
+        <div className={styles.info}><span className="material-symbols-outlined">{isPrivateCall ? 'call' : 'headset_mic'}</span><span className="text-label-md">{isPrivateCall ? 'Private call' : 'Voice channel'}</span></div>
         <div className={styles.actions}>
           {minimized ? (
             <button onClick={() => setIsMinimized(false)} title="Restore voice channel"><span className="material-symbols-outlined">expand_less</span></button>
@@ -68,7 +76,7 @@ export default function CallOverlay() {
             </>
           ) : (
             <>
-              <button onClick={expandToBig} title={onVoicePage ? 'Expand voice channel' : 'Open the voice channel page'}><span className="material-symbols-outlined">fullscreen</span></button>
+              <button onClick={expandToBig} title={isPrivateCall ? 'Expand call' : onVoicePage ? 'Expand voice channel' : 'Open the voice channel page'}><span className="material-symbols-outlined">fullscreen</span></button>
               <button onClick={() => setIsMinimized(true)} title="Minimize voice channel"><span className="material-symbols-outlined">expand_more</span></button>
             </>
           )}

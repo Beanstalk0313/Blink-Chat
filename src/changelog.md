@@ -38,6 +38,13 @@ file needs touching, though keeping package.json's version in sync is nice:
 - Voice rooms now choose who gets in: anyone in the community, only selected roles (which also decides who sees the room), or invite only. Invite-only rooms hold a member list you can revoke, and people with an allowed inviter role get an Invite someone button inside the room.
 - Switching an existing text channel to voice warns that its message history is deleted, and the history is only cleared once you save the change.
 - Calling someone from a private chat rings them first: they get an incoming call card with Accept and Decline, and you wait in a "Calling…" card that you can cancel. Nothing joins the room until they answer, and a ring that nobody answers drops after 45 seconds.
+- Calls ring out loud, and the two ends hear different things: the person being called gets a warm two-note chime, the caller gets a quiet ringback tone. Both stop the moment the call is answered, declined or cancelled.
+- Declining a call now stops the caller's "Calling…" card right away instead of leaving them waiting until the ring times out, and the ring record is cleaned up with it.
+- Private calls hang up together: when one person leaves, the other side's call window closes too, including when the person who left simply closed the tab.
+- A private call now opens as a floating window and expands over the page you are on, instead of trying to open a channel page that does not exist. Hanging up leaves you exactly where you were, and the call window says "Private call" rather than "Voice channel".
+- Starting or joining a call while one is already running asks first: the dialog spells out that you will be disconnected from the current call and connected to the new one.
+- A channel link that no longer exists now says the channel is unavailable, with a way back, instead of loading forever.
+- New startup screen: the Blink mark and wordmark over a bouncing three-bar loader instead of plain loading text, with a reduced-motion fallback.
 - A small formatting bar above the composer adds bold, italic, strikethrough and code with one click, wrapping whatever text you have selected.
 - Private messages feel like channels now: your friend's nickname shows on their messages, and tapping a message's avatar or name (or the avatar in the conversation header) opens their mini profile with the usual actions.
 - Replies and reactions work in private messages: reply to a message to quote it (tap the quote to jump back to it), and react with any of six emoji, with the same chip and toggle behaviour as channels.

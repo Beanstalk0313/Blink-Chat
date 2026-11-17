@@ -877,3 +877,23 @@
     transition: none;
   }
 }
+
+/* Call-switch confirmation dialog actions. */
+.modalCancel,
+.modalConfirm {
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.modalCancel {
+  color: var(--color-on-surface);
+  background: transparent;
+  border: 1px solid var(--color-outline-variant);
+}
+
+.modalConfirm {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 0;
+}

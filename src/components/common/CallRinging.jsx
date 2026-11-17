@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import { useCall } from '../../contexts/CallContext';
 import UserAvatar from './UserAvatar';
+import { startRingtone } from '../../services/ringtone';
 import styles from './CallRinging.module.css';
 
 // The ringing card: incoming calls are answered or declined here, and an
@@ -7,6 +9,13 @@ import styles from './CallRinging.module.css';
 // Nothing joins the room until the call is accepted.
 export default function CallRinging() {
   const { activeCall, incomingCall, outgoingCall, acceptIncomingCall, declineIncomingCall, cancelOutgoingCall } = useCall();
+
+  // The two ends hear different things: a chime for the person being called,
+  // a quiet ringback for the person waiting.
+  useEffect(() => {
+    if (activeCall || (!incomingCall && !outgoingCall)) return undefined;
+    return startRingtone(incomingCall ? 'incoming' : 'outgoing');
+  }, [activeCall, incomingCall, outgoingCall]);
 
   if (activeCall || (!incomingCall && !outgoingCall)) return null;
 

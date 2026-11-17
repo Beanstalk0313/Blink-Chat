@@ -9,6 +9,7 @@ import { renderRichText } from '../services/richText';
 import MarkdownToolbar from '../components/common/MarkdownToolbar';
 import CommunityInviteCard from '../components/common/CommunityInviteCard';
 import ProfilePopover from '../components/common/ProfilePopover';
+import Modal from '../components/common/Modal';
 import {
   ensurePrivateConversation,
   getPrivateConversations,
@@ -69,8 +70,9 @@ export default function PrivateMessages() {
   const [replyingTo, setReplyingTo] = useState(null);
   const [reactionPickerFor, setReactionPickerFor] = useState(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const [isCallSwitchOpen, setIsCallSwitchOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const { startPrivateCall } = useCall();
+  const { startPrivateCall, activeCall, endCall } = useCall();
   const messagesListRef = useRef(null);
   const composerInputRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -285,7 +287,7 @@ export default function PrivateMessages() {
   // Reuses the community voice-channel call system: the same one-to-one room id
   // for both participants, and the same call surface. The call only opens once
   // the other person accepts the ring.
-  const handleStartCall = async () => {
+  const ringRecipient = async () => {
     if (!uid || !selectedConversationId || !recipient?.uid) return;
     const roomId = `pm-${selectedConversationId}`;
     const participant = {
@@ -306,6 +308,22 @@ export default function PrivateMessages() {
     } catch (error) {
       setSendError(error?.message || 'Could not start the call.');
     }
+  };
+
+  const handleStartCall = async () => {
+    if (!uid || !selectedConversationId || !recipient?.uid) return;
+    // A new call replaces the running one, so confirm before dropping it.
+    if (activeCall) {
+      setIsCallSwitchOpen(true);
+      return;
+    }
+    await ringRecipient();
+  };
+
+  const handleConfirmCallSwitch = async () => {
+    setIsCallSwitchOpen(false);
+    endCall();
+    await ringRecipient();
   };
 
   const handleSend = async event => {
@@ -498,6 +516,20 @@ export default function PrivateMessages() {
           </div>
         </> : <div className={styles.emptyThread}><button className={styles.emptyMenuToggle} onClick={() => setIsSidebarOpen(true)} title="Open conversations" aria-label="Open conversations"><span className="material-symbols-outlined">menu</span></button><span className="material-symbols-outlined">forum</span><h2>Your private messages</h2><p>Search for a person to begin a conversation.</p></div>}
       </section>
+
+      <Modal
+        isOpen={isCallSwitchOpen}
+        onClose={() => setIsCallSwitchOpen(false)}
+        title="Switch calls?"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setIsCallSwitchOpen(false)}>Stay here</button>
+            <button className={styles.modalConfirm} onClick={handleConfirmCallSwitch}>Leave and call</button>
+          </>
+        )}
+      >
+        <p className="text-body-md">You’re in a call right now. Calling {friendLabelFor(recipient) || 'this person'} disconnects you from it and connects you to the new one.</p>
+      </Modal>
 
       {selectedProfile && <ProfilePopover user={{ ...selectedProfile.user, displayName: friendLabelFor(selectedProfile.user) }} isOwnProfile={selectedProfile.user?.uid === uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}
     </div>

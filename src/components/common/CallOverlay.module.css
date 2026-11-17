@@ -164,6 +164,25 @@
   }
 }
 
+/* Private calls have no channel page to fill, so expanding them grows a large
+ * window over the current page instead of navigating to a room that has none. */
+.overlay.privatePane {
+  top: 1rem;
+  left: 1rem;
+  width: calc(100% - 2rem);
+  height: calc(100% - 2rem);
+  border-radius: var(--radius-md);
+}
+
+@media (max-width: 767px) {
+  .overlay.privatePane {
+    top: 0.5rem;
+    left: 0.5rem;
+    width: calc(100% - 1rem);
+    height: calc(100% - 1rem);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .overlay {
     animation: none;

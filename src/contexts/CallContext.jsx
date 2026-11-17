@@ -49,6 +49,8 @@ export const CallProvider = ({ children }) => {
     activeCallRef.current = activeCall;
   }, [activeCall]);
 
+
+
   // Community voice channels are rooms you walk into; there is nobody to ring.
   const startCall = (roomId, type = 'video', participant = null) => {
     const pending = outgoingRef.current;
@@ -88,12 +90,49 @@ export const CallProvider = ({ children }) => {
     setOutgoing({ id, roomId, type, participant, calleeName: calleeName || 'Someone', calleeAvatar: calleeAvatar || '' });
   };
 
-  const endCall = () => {
+  const endCall = useCallback(() => {
     setActiveCall(previous => {
       leaveParticipant(previous?.participant);
       return null;
     });
-  };
+  }, [leaveParticipant]);
+
+  // Private calls are one-to-one: when the other person hangs up (or closes
+  // their tab, which clears their roster entry), this side hangs up with them.
+  const endCallRef = useRef(endCall);
+  useEffect(() => {
+    endCallRef.current = endCall;
+  }, [endCall]);
+
+  useEffect(() => {
+    if (!activeCall?.roomId?.startsWith('pm-')) return undefined;
+    const roomId = activeCall.roomId;
+    const myUid = currentUser?.uid;
+    let cancelled = false;
+    // Only end on a departure once this call actually had two people in it, so
+    // the gap before the other side joins cannot hang up a fresh call.
+    let peerSeen = false;
+    let unsubscribe = () => {};
+    callServices().then(({ subscribeToVoiceParticipants }) => {
+      if (cancelled) return;
+      unsubscribe = subscribeToVoiceParticipants(allRooms => {
+        if (cancelled) return;
+        const others = Object.keys(allRooms?.[roomId] || {}).filter(uid => uid !== myUid);
+        if (others.length) {
+          peerSeen = true;
+          return;
+        }
+        if (peerSeen) {
+          peerSeen = false;
+          endCallRef.current?.();
+        }
+      });
+    }).catch(() => {});
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [activeCall, currentUser?.uid]);
 
   const acceptIncomingCall = async () => {
     const invite = incomingRef.current;
@@ -161,6 +200,14 @@ export const CallProvider = ({ children }) => {
           settled = true;
           window.clearTimeout(timeout);
           setOutgoing(null);
+          return;
+        }
+        if (invite.status === 'declined') {
+          // The other side said no: stop calling and clear the ring record.
+          settled = true;
+          window.clearTimeout(timeout);
+          setOutgoing(null);
+          cancelCallInvite(outgoingCall.id).catch(() => {});
           return;
         }
         if (invite.status !== 'accepted') return;

@@ -144,9 +144,12 @@ function ChatAreaContent() {
   const { communityId, channelId } = useParams();
   const { currentUser } = useAuth();
   const { notify } = useNotifications();
-  const { activeCall, startCall } = useCall();
+  const { activeCall, startCall, endCall } = useCall();
   const navigate = useNavigate();
   const [community, setCommunity] = useState(() => communityCache.get(communityId) || null);
+  // Which community id has finished loading, so a missing community shows a
+  // clear message instead of loading forever (for example a `pm-…` room path).
+  const [loadedCommunityId, setLoadedCommunityId] = useState(null);
   const [channels, setChannels] = useState(() => channelsCache.get(communityId) || []);
   const [members, setMembers] = useState([]);
   const [presence, setPresence] = useState({});
@@ -169,6 +172,7 @@ function ChatAreaContent() {
   const [gameModalOpen, setGameModalOpen] = useState(false);
   const [gameModalStep, setGameModalStep] = useState('opponent');
   const [isVoiceInviteOpen, setIsVoiceInviteOpen] = useState(false);
+  const [pendingVoiceJoin, setPendingVoiceJoin] = useState(null);
   const [voiceInviteError, setVoiceInviteError] = useState('');
   const [gameOpponent, setGameOpponent] = useState(null);
   const [pollQuestion, setPollQuestion] = useState('');
@@ -349,6 +353,7 @@ function ChatAreaContent() {
       if (cancelled) return;
       setCommunity(nextCommunity);
       setChannels(nextChannels);
+      setLoadedCommunityId(communityId);
       if (nextCommunity) communityCache.set(communityId, nextCommunity);
       if (nextChannels.length) channelsCache.set(communityId, nextChannels);
       if (!channelId && nextChannels[0]) navigate(`/channels/${communityId}/${nextChannels[0].id}`, { replace: true });
@@ -864,24 +869,41 @@ function ChatAreaContent() {
     return roster;
   };
 
+  const enterVoiceRoom = async channel => {
+    const participant = {
+      channelId: channel.id,
+      uid: currentUser.uid,
+      displayName: currentUser.profile?.displayName || currentUser.displayName || 'User',
+      avatarBase64: currentUser.profile?.avatarBase64 || ''
+    };
+    try {
+      await joinVoiceChannel(channel.id, currentUser.uid, participant);
+      startCall(`${communityId}-${channel.id}`, 'voice', participant);
+    } catch (error) {
+      setSendError(error?.message || 'Could not join the voice channel.');
+    }
+  };
+
   const handleJoinVoice = async () => {
     if (!currentChannel || currentChannel.type !== 'voice') return;
     if (!canAccessVoiceChannel(community, currentChannel, currentUser?.uid)) {
       setSendError('You need an invite or an allowed role to join this voice room.');
       return;
     }
-    const participant = {
-      channelId: currentChannel.id,
-      uid: currentUser.uid,
-      displayName: currentUser.profile?.displayName || currentUser.displayName || 'User',
-      avatarBase64: currentUser.profile?.avatarBase64 || ''
-    };
-    try {
-      await joinVoiceChannel(currentChannel.id, currentUser.uid, participant);
-      startCall(`${communityId}-${currentChannel.id}`, 'voice', participant);
-    } catch (error) {
-      setSendError(error?.message || 'Could not join the voice channel.');
+    // Joining while another call is running drops that call, so ask first.
+    if (activeCall && activeCall.roomId !== `${communityId}-${currentChannel.id}`) {
+      setPendingVoiceJoin(currentChannel);
+      return;
     }
+    await enterVoiceRoom(currentChannel);
+  };
+
+  const handleConfirmVoiceSwitch = async () => {
+    const channel = pendingVoiceJoin;
+    setPendingVoiceJoin(null);
+    if (!channel) return;
+    endCall();
+    await enterVoiceRoom(channel);
   };
 
   // Invite-only rooms: members holding one of the room's inviter roles can add
@@ -1164,7 +1186,18 @@ function ChatAreaContent() {
     return 'Several people are typing…';
   })();
 
-  if (!community) return <div className={styles.loadingContainer}><div className={styles.loader} /><p>Loading Blink...</p></div>;
+  if (!community) {
+    if (loadedCommunityId === communityId) {
+      return (
+        <div className={styles.loadingContainer}>
+          <span className="material-symbols-outlined">link_off</span>
+          <p>That channel isn’t available.</p>
+          <Link to="/messages" className={styles.loadMoreBtn}>Back to messages</Link>
+        </div>
+      );
+    }
+    return <div className={styles.loadingContainer}><div className={styles.loader} /><p>Loading Blink...</p></div>;
+  }
   const banExpiration = community.bannedUsers?.[currentUser?.uid];
   if (banExpiration === -1 || banExpiration > now) return <CommunityBannedScreen expirationTime={banExpiration} />;
 
@@ -1239,6 +1272,22 @@ function ChatAreaContent() {
       </section>
 
       {memberPanePresence.mounted && <aside className={`${styles.memberListSidebar} ${memberPanePresence.closing ? styles.memberListSidebarClosing : ''}`}><p className="text-label-sm text-tertiary">MEMBERS - {activeMembers.length}</p>{activeMembers.map(member => <div className={styles.memberItemWrap} key={member.uid}><button className={styles.memberItem} data-profile-trigger onClick={event => { setSelectedProfile(selectedProfile?.user?.uid === member.uid ? null : { messageId: null, user: member, anchor: event.currentTarget }); }}><UserAvatar user={member} size="2rem" /><span>{nameFor(member)}</span><span className={`${styles.statusDot} ${isUserOnline(presence[member.uid]) ? styles.online : styles.offline}`} /></button>{selectedProfile?.user?.uid === member.uid && <ProfilePopover user={selectedProfile.user} isOwnProfile={selectedProfile.user?.uid === currentUser.uid} anchor={selectedProfile.anchor} onClose={() => setSelectedProfile(null)} />}</div>)}</aside>}
+
+      <Modal
+        isOpen={Boolean(pendingVoiceJoin)}
+        onClose={() => setPendingVoiceJoin(null)}
+        title="Switch calls?"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setPendingVoiceJoin(null)}>Stay here</button>
+            <button className={styles.modalConfirm} onClick={handleConfirmVoiceSwitch}>Leave and join</button>
+          </>
+        )}
+      >
+        <p className="text-body-md">
+          You’re in a call right now. Joining {pendingVoiceJoin?.name ? `#${pendingVoiceJoin.name}` : 'this room'} disconnects you from it and connects you to the new one.
+        </p>
+      </Modal>
 
       <Modal isOpen={isVoiceInviteOpen} onClose={() => setIsVoiceInviteOpen(false)} title={`Invite to ${currentChannel?.name || 'voice room'}`}>
         <p className={styles.inviteHint}>Invited members can see and join this room.</p>
