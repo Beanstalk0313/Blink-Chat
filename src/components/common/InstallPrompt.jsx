@@ -22,7 +22,11 @@ export default function InstallPrompt() {
             .catch(() => {});
         }
       } else {
-        navigator.serviceWorker.register('/sw.js').catch(() => {});
+        // Never let the HTTP cache decide which worker build is current.
+        navigator.serviceWorker
+          .register('/sw.js', { updateViaCache: 'none' })
+          .then(registration => registration.update().catch(() => {}))
+          .catch(() => {});
       }
     }
     const handleInstall = event => {

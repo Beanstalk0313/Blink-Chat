@@ -1,4 +1,4 @@
-const CACHE_NAME = 'blink-shell-v8';
+const CACHE_NAME = 'blink-shell-v9';
 const APP_SHELL = ['/', '/index.html', '/logo.svg', '/favicon.svg'];
 
 self.addEventListener('message', event => {
@@ -29,7 +29,9 @@ self.addEventListener('fetch', event => {
   const isNavigation = event.request.mode === 'navigate' || event.request.destination === 'document';
   event.respondWith(
     (isNavigation
-      ? fetch(event.request).then(response => {
+      // Always revalidate the document: an HTTP-cached index.html can keep
+      // pointing at hashed assets a newer deploy has removed.
+      ? fetch(event.request, { cache: 'no-store' }).then(response => {
         if (response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put('/index.html', copy)).catch(() => {});

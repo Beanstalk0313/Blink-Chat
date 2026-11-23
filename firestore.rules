@@ -62,11 +62,6 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/parentalControls/$(uid)).data;
     }
 
-    function isCommunityBlockedForMe(communityId) {
-      return hasParentalControls() &&
-        parentalControlsFor(request.auth.uid).get('blockedCommunities', []).hasAny([communityId]);
-    }
-
     function isCommunityCreationBlockedForMe() {
       return hasParentalControls() &&
         parentalControlsFor(request.auth.uid).get('blockCommunityCreation', false) == true;
