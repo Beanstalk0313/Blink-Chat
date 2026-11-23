@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import StartupErrorBoundary from './components/common/StartupErrorBoundary.jsx'
 import AppErrorScreen from './components/common/AppErrorScreen.jsx'
+import { installAppGestures } from './services/appGestures'
+
+installAppGestures()
 
 const root = createRoot(document.getElementById('root'))
 

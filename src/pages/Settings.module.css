@@ -332,3 +332,223 @@
 .switch input:checked + .slider:before {
   transform: translateX(22px);
 }
+
+/* ---- Custom themes ---------------------------------------------------- */
+.themeBuilder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.themeNameInput {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: 0.7rem 1rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-md);
+  font: var(--font-body-md);
+}
+
+.themeNameInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.colorField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+}
+
+.colorInput {
+  width: 3.25rem;
+  height: 2.5rem;
+  padding: 0.15rem;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.customThemeList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.customThemeRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--tint-faint);
+  border: 1px solid var(--tint-subtle);
+  border-radius: var(--radius-md);
+}
+
+.customThemeSwatches {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.customThemeSwatches i {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--tint-strong);
+}
+
+.customThemeSwatches i + i {
+  margin-left: -0.3rem;
+}
+
+.customThemeName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-on-surface);
+  font: var(--font-label-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.themeDeleteBtn {
+  padding: 0.3rem 0.7rem;
+  color: var(--color-error);
+  background: transparent;
+  border: 1px solid var(--color-error-medium);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font: var(--font-label-sm);
+}
+
+.themeDeleteBtn:hover {
+  background: var(--color-error-soft);
+}
+
+/* ---- Parental controls ------------------------------------------------ */
+.parentalCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1.75rem 2rem;
+  background: var(--tint-faint);
+  border: 1px solid var(--tint-subtle);
+  border-radius: var(--radius-xl);
+}
+
+.parentalCard > .submitBtn {
+  align-self: flex-start;
+  text-decoration: none;
+}
+
+.parentalMeta {
+  margin: 0;
+  color: var(--color-tertiary);
+  font: var(--font-body-sm);
+}
+
+.parentalForm {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.parentalForm .input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  font: var(--font-label-md);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.parentalActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ghostBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1.25rem;
+  color: var(--color-on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--tint-active);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font: var(--font-label-md);
+  text-decoration: none;
+}
+
+.ghostBtn:hover {
+  color: var(--color-on-surface);
+  background: var(--tint-subtle);
+}
+
+.dangerBtn {
+  flex-shrink: 0;
+  padding: 0.65rem 1.2rem;
+  color: var(--color-error);
+  background: transparent;
+  border: 1px solid var(--color-error-medium);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font: var(--font-label-md);
+}
+
+.dangerBtn:hover {
+  background: var(--color-error-soft);
+}
+
+.settingCardInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding-top: 1rem;
+  border-top: 1px solid var(--tint-subtle);
+}
+
+.pairingCodeRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pairingCode {
+  padding: 0.55rem 0.9rem;
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border: 1px dashed var(--color-primary-medium);
+  border-radius: var(--radius-md);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.22em;
+}
+
+@media (max-width: 640px) {
+  .parentalCard {
+    padding: 1.25rem;
+  }
+
+  .settingCard {
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding: 1.25rem;
+  }
+}

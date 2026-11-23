@@ -219,6 +219,19 @@
   color: var(--color-on-surface-variant);
 }
 
+.pendingPerson {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.pendingPerson span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .searchBox {
   display: flex;
   align-items: center;
@@ -266,14 +279,23 @@
     justify-content: space-between;
   }
 
+  .tabs {
+    gap: 0.2rem;
+    padding: 0.25rem;
+  }
+
   .tab {
     flex: 1;
     justify-content: center;
-    padding: 0.45rem 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.6rem 0.45rem;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 
-  .tab span:not(.material-symbols-outlined):not(.tabBadge) {
-    display: none;
+  .tab .material-symbols-outlined {
+    font-size: 1.05rem;
   }
 
   .personCard {

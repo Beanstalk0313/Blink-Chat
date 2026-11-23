@@ -1414,3 +1414,43 @@
 .invitedChip button .material-symbols-outlined {
   font-size: 0.85rem;
 }
+
+/* ---- Owner-only community deletion ------------------------------------ */
+.dangerCard {
+  border-color: var(--color-error-medium);
+  background: var(--color-error-soft);
+}
+
+.dangerCard .cardTitle .material-symbols-outlined {
+  color: var(--color-error);
+}
+
+.dangerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--color-error-medium);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-error);
+  font: var(--font-label-md);
+  cursor: pointer;
+  transition: background-color 150ms ease, filter 150ms ease;
+}
+
+.dangerBtn:hover {
+  background: var(--color-error-soft);
+  filter: brightness(1.05);
+}
+
+.deleteConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.deleteConfirm p {
+  margin: 0;
+}

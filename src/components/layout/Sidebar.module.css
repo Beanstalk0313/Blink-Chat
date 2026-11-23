@@ -335,6 +335,16 @@
   color: var(--color-on-secondary);
 }
 
+/* The highlight is the accent colour, which is light on themes such as Forest
+   and Sunset. The row's label and icon set their own colours, so they have to
+   follow the highlight instead of staying white-on-white. */
+.navItem.active .navLabel,
+.navItem.active span.material-symbols-outlined,
+.navItem.active .communityFallback,
+.navItem.active .tooltip {
+  color: var(--color-on-secondary);
+}
+
 .navItem.active .iconWrapper,
 .navItem.active .communityIconWrapper {
   background: var(--tint-active);

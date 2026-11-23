@@ -16,9 +16,26 @@ export const CallProvider = ({ children }) => {
   // A ring the other person has to answer before the call surface opens.
   const [incomingCall, setIncomingCall] = useState(null);
   const [outgoingCall, setOutgoingCall] = useState(null);
+  // A ring that ended without connecting ("Call declined") stays on screen for
+  // a moment so the caller sees why the widget is going away.
+  const [outgoingNotice, setOutgoingNotice] = useState(null);
+  const noticeTimerRef = useRef(0);
   const incomingRef = useRef(null);
   const outgoingRef = useRef(null);
   const activeCallRef = useRef(null);
+
+  const showOutgoingNotice = useCallback(notice => {
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+    setOutgoingNotice({ ...notice, key: Date.now() });
+    noticeTimerRef.current = window.setTimeout(() => {
+      noticeTimerRef.current = 0;
+      setOutgoingNotice(null);
+    }, 2400);
+  }, []);
+
+  useEffect(() => () => {
+    if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
+  }, []);
 
   const leaveParticipant = useCallback(participant => {
     if (!participant?.channelId || !participant?.uid) return;
@@ -53,6 +70,7 @@ export const CallProvider = ({ children }) => {
 
   // Community voice channels are rooms you walk into; there is nobody to ring.
   const startCall = (roomId, type = 'video', participant = null) => {
+    setOutgoingNotice(null);
     const pending = outgoingRef.current;
     if (pending) {
       setOutgoing(null);
@@ -65,6 +83,7 @@ export const CallProvider = ({ children }) => {
   // Private calls ring first: the call surface only opens once accepted, and the
   // caller waits in a "calling" card that can be cancelled.
   const startPrivateCall = async ({ roomId, type = 'voice', participant, calleeUid, calleeName, calleeAvatar }) => {
+    setOutgoingNotice(null);
     const pending = outgoingRef.current;
     if (pending) {
       if (pending.roomId === roomId) return;
@@ -203,10 +222,12 @@ export const CallProvider = ({ children }) => {
           return;
         }
         if (invite.status === 'declined') {
-          // The other side said no: stop calling and clear the ring record.
+          // The other side said no: keep the card up long enough to say so, then
+          // clear the ring record.
           settled = true;
           window.clearTimeout(timeout);
           setOutgoing(null);
+          showOutgoingNotice({ type: 'declined', name: outgoingCall.calleeName || 'They' });
           cancelCallInvite(outgoingCall.id).catch(() => {});
           return;
         }
@@ -226,7 +247,7 @@ export const CallProvider = ({ children }) => {
       unsubscribe();
       window.clearTimeout(timeout);
     };
-  }, [outgoingCall, openCall, setOutgoing]);
+  }, [outgoingCall, openCall, setOutgoing, showOutgoingNotice]);
 
   // Listen for rings addressed to this account.
   useEffect(() => {
@@ -282,6 +303,7 @@ export const CallProvider = ({ children }) => {
         endCall,
         incomingCall: activeIncomingCall,
         outgoingCall,
+        outgoingNotice,
         acceptIncomingCall,
         declineIncomingCall,
         cancelOutgoingCall

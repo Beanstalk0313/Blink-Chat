@@ -697,6 +697,58 @@
   font: var(--font-body-md);
 }
 
+/* Inline message editing, matching the community channel composer. */
+.editForm {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: min(32rem, 100%);
+}
+
+.editForm input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  font: var(--font-body-sm);
+}
+
+.editForm input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
+.editForm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  padding: 0;
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.editForm button .material-symbols-outlined {
+  font-size: 1rem;
+}
+
+.editForm button[type='button'] {
+  color: var(--color-on-surface-variant);
+  background: var(--tint-active);
+}
+
+.sent .editForm {
+  margin-left: auto;
+}
+
 .emptyThread {
   position: relative;
   display: flex;
@@ -818,7 +870,11 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.55rem 0.7rem;
+  background: transparent;
+  border: 0;
+  text-align: left;
   border-radius: var(--radius-sm);
   color: var(--color-on-surface);
   font: var(--font-label-md);

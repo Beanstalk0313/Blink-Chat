@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createCommunity } from '../services/db';
+import { subscribeToChildControls } from '../services/parental';
 import { useAuth } from '../contexts/AuthContext';
 import { compressAndConvert } from '../services/utils';
 import styles from './CreateCommunity.module.css';
@@ -17,6 +18,14 @@ export default function CreateCommunity() {
   const [originalFile, setOriginalFile] = useState(null);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  // A guardian can turn community creation off for this account. The Firestore
+  // rule enforces the same thing, so this is the friendly version, not the lock.
+  const [parentalControls, setParentalControls] = useState(null);
+
+  useEffect(() => {
+    if (!currentUser?.uid) return undefined;
+    return subscribeToChildControls(currentUser.uid, setParentalControls);
+  }, [currentUser?.uid]);
 
   const handleIconChange = async (e) => {
     const file = e.target.files[0] || originalFile;
@@ -66,6 +75,28 @@ export default function CreateCommunity() {
     }
     setLoading(false);
   };
+
+  if (parentalControls?.blockCommunityCreation) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.container}>
+          <button className={styles.backBtn} onClick={() => navigate(-1)}>
+            <span className="material-symbols-outlined">arrow_back</span>
+            <span>Back</span>
+          </button>
+          <div className={styles.content}>
+            <div className={styles.header}>
+              <h1 className="text-display-xl">Community creation is off</h1>
+              <p className="text-body-lg text-tertiary">A guardian has turned off creating communities for this account. They can change that in Parental Controls.</p>
+            </div>
+            <button type="button" className={styles.submitBtn} onClick={() => navigate('/settings')}>
+              Open settings
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.page}>

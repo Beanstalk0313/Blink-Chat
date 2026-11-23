@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCall } from '../contexts/CallContext';
 import UserAvatar from '../components/common/UserAvatar';
-import { uploadFile } from '../services/upload';
+import AttachmentUploadModal from '../components/common/AttachmentUploadModal';
 import { friendNicknameOf } from '../services/nicknames';
 import { renderRichText } from '../services/richText';
 import MarkdownToolbar from '../components/common/MarkdownToolbar';
@@ -22,6 +22,7 @@ import {
   subscribeToPrivateMessages,
   subscribeToCommunityPresence,
   deletePrivateMessage,
+  editPrivateMessage,
   isUserOnline,
   togglePrivateReaction
 } from '../services/db';
@@ -43,6 +44,16 @@ const MARKDOWN_CLASSES = {
   heading: styles.mdHeading,
   list: styles.mdList
 };
+
+// Conversations arrive newest-first from the data layer, but the live
+// subscription can emit a partial list (one conversation's metadata at a
+// time), so selection must be decided by the newest `updatedAt`, not by
+// whichever row happens to arrive first.
+function newestConversationId(conversations = []) {
+  return conversations.reduce((newest, conversation) => (
+    !newest || (Number(conversation.updatedAt) || 0) > (Number(newest.updatedAt) || 0) ? conversation : newest
+  ), null)?.id || null;
+}
 
 function otherParticipant(conversation, uid) {
   const participantEntries = Object.entries(conversation?.participants || {});
@@ -71,7 +82,9 @@ export default function PrivateMessages() {
   const [reactionPickerFor, setReactionPickerFor] = useState(null);
   const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
   const [isCallSwitchOpen, setIsCallSwitchOpen] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
+  const [isAttachUploadOpen, setIsAttachUploadOpen] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState(null);
+  const [editingText, setEditingText] = useState('');
   const { startPrivateCall, activeCall, endCall } = useCall();
   const messagesListRef = useRef(null);
   const composerInputRef = useRef(null);
@@ -126,13 +139,14 @@ export default function PrivateMessages() {
     if (!uid) return undefined;
     getPrivateConversations(uid).then(nextConversations => {
       setConversations(nextConversations);
-      setSelectedConversationId(previous => previous || nextConversations[0]?.id || null);
+      // Always reopen on the most recent conversation, never on whichever
+      // thread the stream happened to deliver first.
+      setSelectedConversationId(previous => previous || newestConversationId(nextConversations));
       setLoading(false);
     }).catch(() => setLoading(false));
-    return subscribeToPrivateConversations(uid, nextConversations => {
-      setConversations(nextConversations);
-      setSelectedConversationId(previous => previous || nextConversations[0]?.id || null);
-    });
+    // The live stream only keeps the list fresh; picking a conversation is the
+    // full read's job so a partial first snapshot cannot latch an old thread.
+    return subscribeToPrivateConversations(uid, setConversations);
   }, [uid]);
 
   useEffect(() => {
@@ -238,6 +252,8 @@ export default function PrivateMessages() {
     : recipient);
 
   const selectUser = user => {
+    setEditingMessageId(null);
+    setEditingText('');
     const conversationId = privateConversationId(uid, user.uid);
     setConversations(previous => previous.some(conversation => conversation.id === conversationId)
       ? previous
@@ -258,7 +274,11 @@ export default function PrivateMessages() {
     const convId = privateConversationId(uid, targetUid);
     const existing = conversations.find(c => c.id === convId);
     if (existing) {
-      queueMicrotask(() => setSelectedConversationId(convId));
+      queueMicrotask(() => {
+        setEditingMessageId(null);
+        setEditingText('');
+        setSelectedConversationId(convId);
+      });
       return;
     }
     getUserProfile(targetUid).then(userProfile => {
@@ -267,21 +287,9 @@ export default function PrivateMessages() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uid, loading, searchParams]);
 
-  const handleAttachmentPick = async event => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setIsAttachMenuOpen(false);
-    setIsUploading(true);
-    setSendError('');
-    try {
-      const uploaded = await uploadFile(file);
-      setPendingAttachment({ url: uploaded.url, name: uploaded.name || file.name, size: uploaded.size || file.size });
-    } catch {
-      setSendError('Could not upload that file. Try again.');
-    } finally {
-      setIsUploading(false);
-    }
+  const handleAttachmentUploaded = uploaded => {
+    if (!uploaded?.url) return;
+    setPendingAttachment({ url: uploaded.url, name: uploaded.name || 'Attachment', size: uploaded.size || 0 });
   };
 
   // Reuses the community voice-channel call system: the same one-to-one room id
@@ -354,6 +362,18 @@ export default function PrivateMessages() {
     }
   };
 
+  const handleEditPrivateMessage = async (messageId, text) => {
+    const trimmed = text.trim();
+    if (!selectedConversationId || !trimmed) return;
+    setSendError('');
+    try {
+      await editPrivateMessage(selectedConversationId, messageId, trimmed);
+      setEditingMessageId(null);
+    } catch {
+      setSendError('That message could not be edited.');
+    }
+  };
+
   const handleToggleReaction = async (message, emoji) => {
     if (!uid || !selectedConversationId) return;
     const reacted = Boolean(message.reactions?.[emoji]?.[uid]);
@@ -370,6 +390,8 @@ export default function PrivateMessages() {
     .filter(entry => entry.uids.length > 0);
 
   const handleConversationClick = conversationId => {
+    setEditingMessageId(null);
+    setEditingText('');
     setSelectedConversationId(conversationId);
     if (window.innerWidth <= 1024) setIsSidebarOpen(false);
   };
@@ -461,11 +483,18 @@ export default function PrivateMessages() {
                           <button className={styles.msgActionBtn} onClick={() => setReactionPickerFor(previous => (previous === message.id ? null : message.id))} title="Add reaction" aria-label="Add reaction"><span className="material-symbols-outlined">add_reaction</span></button>
                           {reactionPickerFor === message.id && <div className={styles.emojiPicker}>{REACTION_EMOJIS.map(emoji => <button key={emoji} type="button" className={styles.emojiChoice} onClick={() => { setReactionPickerFor(null); handleToggleReaction(message, emoji); }} aria-label={`React with ${emoji}`}>{emoji}</button>)}</div>}
                         </div>
+                        {isMe && message.text && !message.invite && <button className={styles.msgActionBtn} onClick={() => { setEditingMessageId(message.id); setEditingText(message.text || ''); }} title="Edit message"><span className="material-symbols-outlined">edit</span></button>}
                         {isMe && <button className={styles.msgActionBtn} onClick={async () => { try { await deletePrivateMessage(selectedConversationId, message.id); } catch (err) { console.error('Failed to delete message:', err); } }} title="Delete message"><span className="material-symbols-outlined">delete</span></button>}
                       </div>
                     </div>
                     {message.replyTo && <button type="button" className={styles.replyQuote} onClick={() => document.getElementById(`pm-message-${message.replyTo.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}><span className="material-symbols-outlined">reply</span><span className={styles.replyQuoteText}><strong>{message.replyTo.authorName || 'Message'}</strong>{message.replyTo.text ? <small>{message.replyTo.text}</small> : null}</span></button>}
-                    {(message.text && message.text !== message.attachment?.name && !message.invite) && <div className={styles.messageBubble}>{renderRichText(message.text, { classNames: MARKDOWN_CLASSES })}</div>}
+                    {editingMessageId === message.id ? (
+                      <form className={styles.editForm} onSubmit={event => { event.preventDefault(); handleEditPrivateMessage(message.id, editingText); }}>
+                        <input value={editingText} onChange={event => setEditingText(event.target.value)} autoFocus aria-label="Edit message" />
+                        <button type="submit" title="Save edit" aria-label="Save edit"><span className="material-symbols-outlined">check</span></button>
+                        <button type="button" title="Cancel edit" aria-label="Cancel edit" onClick={() => setEditingMessageId(null)}><span className="material-symbols-outlined">close</span></button>
+                      </form>
+                    ) : (message.text && message.text !== message.attachment?.name && !message.invite) && <div className={styles.messageBubble}>{renderRichText(message.text, { classNames: MARKDOWN_CLASSES })}</div>}
                     {message.invite && <CommunityInviteCard invite={message.invite} />}
                     {message.attachment && <div className={styles.fileCard}><span className="material-symbols-outlined">description</span><span>{message.attachment.name || 'Attachment'}</span><a href={message.attachment.url} target="_blank" rel="noreferrer" title="Open attachment"><span className="material-symbols-outlined">download</span></a></div>}
                     {reactionsFor(message).length > 0 && <div className={styles.reactionRow}>{reactionsFor(message).map(({ emoji, uids }) => <button key={emoji} type="button" className={`${styles.reactionChip} ${uids.includes(uid) ? styles.reactionChipActive : ''}`} title={uids.map(reactionUid => (reactionUid === uid ? 'You' : friendLabelFor(recipient))).join(', ')} onClick={() => handleToggleReaction(message, emoji)}><span>{emoji}</span><span>{uids.length}</span></button>)}</div>}
@@ -487,7 +516,7 @@ export default function PrivateMessages() {
               </span>
               <button type="button" onClick={() => setReplyingTo(null)} title="Cancel reply" aria-label="Cancel reply"><span className="material-symbols-outlined">close</span></button>
             </div>}
-            <MarkdownToolbar inputRef={composerInputRef} value={messageText} onChange={setMessageText} disabled={isUploading} />
+            <MarkdownToolbar inputRef={composerInputRef} value={messageText} onChange={setMessageText} />
             {pendingAttachment && <div className={styles.pendingAttachment}>
               <span className="material-symbols-outlined">description</span>
               <span>{pendingAttachment.name}</span>
@@ -498,11 +527,10 @@ export default function PrivateMessages() {
             <form className={styles.inputContainer} onSubmit={handleSend}>
               <div className={styles.attachWrap}>
                 {isAttachMenuOpen && <div className={styles.attachMenu}>
-                  <label className={styles.attachItem}>
-                    <span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>
-                    <span>{isUploading ? 'Uploading...' : 'Attach file'}</span>
-                    <input type="file" hidden onChange={handleAttachmentPick} disabled={isUploading} />
-                  </label>
+                  <button type="button" className={styles.attachItem} onClick={() => { setIsAttachMenuOpen(false); setIsAttachUploadOpen(true); }}>
+                    <span className="material-symbols-outlined">attach_file</span>
+                    <span>Attach file</span>
+                  </button>
                 </div>}
                 <button type="button" className={styles.inputAction} onClick={() => setIsAttachMenuOpen(open => !open)} title="More actions" aria-label="More actions">
                   <span className="material-symbols-outlined">{isAttachMenuOpen ? 'close' : 'add'}</span>
@@ -516,6 +544,8 @@ export default function PrivateMessages() {
           </div>
         </> : <div className={styles.emptyThread}><button className={styles.emptyMenuToggle} onClick={() => setIsSidebarOpen(true)} title="Open conversations" aria-label="Open conversations"><span className="material-symbols-outlined">menu</span></button><span className="material-symbols-outlined">forum</span><h2>Your private messages</h2><p>Search for a person to begin a conversation.</p></div>}
       </section>
+
+      <AttachmentUploadModal isOpen={isAttachUploadOpen} onClose={() => setIsAttachUploadOpen(false)} onUploaded={handleAttachmentUploaded} />
 
       <Modal
         isOpen={isCallSwitchOpen}

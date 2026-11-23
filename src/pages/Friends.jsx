@@ -85,6 +85,7 @@ export default function Friends() {
     const wanted = [...new Set([
       ...friendUids,
       ...incoming.map(request => request.from),
+      ...outgoing.map(request => request.to),
       ...(blockedKey ? blockedKey.split(',') : [])
     ])].filter(needed => needed && !profiles[needed]);
     if (!wanted.length) return undefined;
@@ -95,7 +96,7 @@ export default function Friends() {
         if (Object.keys(next).length) setProfiles(previous => ({ ...previous, ...next }));
       });
     return () => { cancelled = true; };
-  }, [uid, friendUids, incoming, blockedKey, profiles]);
+  }, [uid, friendUids, incoming, outgoing, blockedKey, profiles]);
 
   const friendSet = new Set(friendUids);
   const outgoingSet = new Set(outgoing.map(request => request.to));
@@ -256,7 +257,7 @@ export default function Friends() {
         <div>
           <p className={styles.eyebrow}>YOUR PEOPLE</p>
           <h1 className="text-display-xl">Friends</h1>
-          <p className="text-body-lg text-tertiary">People you can count on for a game or a chat.</p>
+          <p className="text-body-lg text-tertiary">The people you actually want to hear from.</p>
         </div>
         <div className={styles.tabs}>
           {TABS.map(tab => (
@@ -309,7 +310,10 @@ export default function Friends() {
               <h2 className="text-label-sm">PENDING REQUESTS YOU SENT</h2>
               {outgoing.map(request => (
                 <article key={request.id} className={styles.pendingRow}>
-                  <span>{profiles[request.to]?.displayName || 'Someone'}</span>
+                  <div className={styles.pendingPerson}>
+                    <UserAvatar user={profiles[request.to] || { uid: request.to, displayName: 'Someone' }} size="2rem" />
+                    <span>{profiles[request.to]?.displayName || 'Loading…'}</span>
+                  </div>
                   <button type="button" className={styles.ghostBtn} disabled={busyUid === request.to} onClick={() => handleCancel(request)}>Cancel</button>
                 </article>
               ))}
@@ -321,7 +325,10 @@ export default function Friends() {
               <h2 className="text-label-sm">BLOCKED</h2>
               {blockedProfiles.map(profile => (
                 <article key={`blocked-${profile.uid}`} className={styles.pendingRow}>
-                  <span>{profile.displayName || 'Blocked user'}</span>
+                  <div className={styles.pendingPerson}>
+                    <UserAvatar user={profile} size="2rem" />
+                    <span>{profile.displayName || 'Blocked user'}</span>
+                  </div>
                   <button type="button" className={styles.ghostBtn} disabled={busyUid === profile.uid} onClick={() => handleUnblock(profile.uid)}>Unblock</button>
                 </article>
               ))}

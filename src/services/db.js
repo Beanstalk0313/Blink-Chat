@@ -13,6 +13,8 @@ import {
   where,
   updateDoc,
   arrayUnion,
+  arrayRemove,
+  deleteDoc,
   onSnapshot,
   deleteField,
   serverTimestamp as firestoreServerTimestamp,
@@ -179,6 +181,29 @@ export async function clearChannelMessages(channelId) {
   if (!db) return;
   await remove(ref(db, `messages/${channelId}`));
   messagesCache.delete(channelId);
+}
+
+// Deletes a community and everything under it a client may remove: every
+// channel (with its RTDB history), then the community document, then the
+// owner's own membership and pin entries. Other members' stale ids simply
+// resolve to a missing community.
+export async function deleteCommunity(communityId, ownerUid) {
+  if (!communityId) return;
+  const channels = await getChannels(communityId).catch(() => []);
+  // Channels are removed first: their delete rule resolves permission through
+  // the community document, which must still exist at that point.
+  await Promise.all(channels.map(async channel => {
+    await clearChannelMessages(channel.id).catch(() => {});
+    await deleteDoc(doc(firestore, 'channels', channel.id)).catch(() => {});
+  }));
+  await deleteDoc(doc(firestore, 'communities', communityId));
+  if (ownerUid) {
+    await updateDoc(doc(firestore, 'users', ownerUid), {
+      joinedCommunities: arrayRemove(communityId),
+      pinnedCommunities: arrayRemove(communityId)
+    }).catch(() => {});
+  }
+  clearSessionCache();
 }
 
 export async function getChannels(communityId) {
@@ -1333,6 +1358,28 @@ export async function markPrivateConversationRead(uid, conversationId, readThrou
 export async function togglePrivateReaction(conversationId, messageId, emoji, uid, currentlyReacted) {
   if (!db || !conversationId || !messageId || !emoji || !uid) return;
   await set(ref(db, `privateConversations/${conversationId}/messages/${messageId}/reactions/${emoji}/${uid}`), currentlyReacted ? null : true);
+}
+
+export async function editPrivateMessage(conversationId, messageId, newText) {
+  if (!db || !conversationId || !messageId) return;
+  const trimmed = newText.trim();
+  // Only `text` is written: the conversation's members, timestamp and sender
+  // stay untouched, which is what the RTDB rule for a sender edit allows.
+  await set(ref(db, `privateConversations/${conversationId}/messages/${messageId}/text`), trimmed);
+  // Keep the conversation list preview (and its sort key) in step when the
+  // edited message is the newest one in the thread.
+  try {
+    const snapshot = await get(ref(db, `privateConversations/${conversationId}/messages`));
+    const messages = snapshot.exists()
+      ? Object.entries(snapshot.val() || {}).map(([id, message]) => ({ id, ...message }))
+      : [];
+    const newest = messages.sort(compareMessages).at(-1);
+    if (newest?.id === messageId) {
+      await update(ref(db, `privateConversations/${conversationId}`), { lastMessage: trimmed });
+    }
+  } catch (error) {
+    console.warn('Could not refresh the conversation preview:', error);
+  }
 }
 
 export async function deletePrivateMessage(conversationId, messageId) {

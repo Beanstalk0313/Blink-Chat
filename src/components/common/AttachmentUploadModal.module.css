@@ -1,0 +1,123 @@
+.options {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  text-align: left;
+  color: var(--color-on-surface);
+  background: var(--color-surface-container);
+  border: 1px solid var(--tint-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.option:hover:not(:disabled) {
+  background: var(--tint-hover);
+}
+
+.optionActive {
+  background: var(--tint-active);
+  border-color: var(--color-primary);
+}
+
+.optionDisabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.option > .material-symbols-outlined {
+  font-size: 1.35rem;
+  color: var(--color-primary);
+}
+
+.optionBody {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.optionBody strong {
+  font: var(--font-label-lg);
+}
+
+.optionBody small {
+  color: var(--color-on-surface-variant);
+  font: var(--font-body-sm);
+  line-height: 1.45;
+}
+
+.durations {
+  margin-top: 1.35rem;
+}
+
+.durationsLabel {
+  margin-bottom: 0.6rem;
+  color: var(--color-tertiary);
+  font: var(--font-label-sm);
+  letter-spacing: 0.04em;
+}
+
+.durationRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.durationChip {
+  padding: 0.4rem 0.85rem;
+  color: var(--color-on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--tint-active);
+  border-radius: 999px;
+  font: var(--font-label-md);
+  cursor: pointer;
+}
+
+.durationChip:hover {
+  background: var(--tint-hover);
+}
+
+.durationChipActive {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.error {
+  margin-top: 1rem;
+  color: var(--color-error);
+  font: var(--font-body-sm);
+}
+
+.cancel,
+.confirm {
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--radius-sm);
+  font: var(--font-label-md);
+  cursor: pointer;
+}
+
+.cancel {
+  color: var(--color-on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--tint-active);
+}
+
+.confirm {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+
+.cancel:disabled,
+.confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

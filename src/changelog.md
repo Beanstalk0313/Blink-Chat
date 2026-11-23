@@ -10,6 +10,30 @@ file needs touching, though keeping package.json's version in sync is nice:
     - First note
     - Second note
 
+## 2.10.1 | 2026-11-23 | Delete communities, app-like gestures
+- Community settings has an owner-only **Delete community** action. It asks you to type the community's name, then removes its channels, its message history and the community itself.
+- The notification menu and message search on the community top bar are now edge-to-edge sheets on phones, so they can no longer be cut off or stuck at an unusable size. Tapping anywhere outside them (or pressing Escape) closes them.
+- On iPhone and iPad, Blink now behaves more like an installed app: pinch-to-zoom and double-tap zoom are disabled, and rubber-band overscroll is stopped at the app and inside scroll areas.
+
+## 2.10.0 | 2026-11-23 | Parental controls, custom themes and calmer calls
+- Private messages can be edited now, exactly like community messages: the pencil on your own message opens an inline editor, and the conversation preview updates too.
+- Opening Private Messages goes to the most recent conversation instead of whichever thread loaded first.
+- Parental controls: a child generates a one-time code on their own account, and a guardian enters it. Nobody can attach controls to an account without that code, so it cannot be done to someone else.
+- The guardian dashboard shows the child's communities and lets a guardian read every channel's messages without joining, block communities outright, and switch off community creation.
+- A blocked community cannot be opened or joined by the child, and a blocked account cannot create communities; both are enforced by Firestore rules, not just the UI.
+- The calling widget now rises from the bottom of the screen as just the other person's photo before expanding into the full card, for both callers and people being called.
+- Declining a private call now shows "Call declined" on the caller's widget before it slides away.
+- Forest (and community Forest) sidebar highlights keep their labels readable: active row text now follows the highlight colour instead of staying white.
+- Custom themes: build your own from an accent, a highlight and a background colour in Settings → Appearance, and delete them whenever you like. They appear anywhere a theme can be chosen.
+- Pending friend requests you sent now show the person's photo and name instead of "Someone".
+- The Friends tabs on phones are taller and keep their icons and labels.
+- The friends page subtitle reads better.
+
+## 2.9.6 | 2026-11-18 | Attaching files now asks how long they should last
+- The attach button opens a dialog first: send the file as a temporary upload, and pick whether it lives for 1 hour, 12 hours, 24 hours or 3 days. Files up to 1 GB go through Litterbox, Catbox's expiring host.
+- Permanent uploads (up to 200 MB, on Catbox) are shown but switched off for now. Catbox's upload endpoint sends no CORS headers, so a browser can send a file and then never learn its link; the option turns back on once a small relay is in place.
+- The dialog stays open while the file goes up, says Uploading…, and closing it cancels the upload.
+
 ## 2.9.5 | 2026-11-16 | Call from a private chat, attach files, Friends on mobile
 - The lock in a private conversation's header is now a call button: it opens a call with that person, using the same room system as community voice channels, so you both land in the same call.
 - Private messages have the composer's plus button back. Attach a file and it uploads, shows as a chip above the composer, and arrives as a download card in the conversation.

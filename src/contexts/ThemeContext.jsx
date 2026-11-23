@@ -9,12 +9,16 @@ const ThemeContext = createContext(null);
 // Themes are palette specs (primary / accent / base), not stylesheets. See
 // src/theme/palette.js: every surface, outline, tint, glow and shadow token is
 // derived from those three colours, so any theme covers the whole app.
-const themes = THEMES;
+// Custom themes are stored on the signed-in user's profile under
+// `customThemes` and merged over the stock set, so every picker and every
+// community theme selector sees them without extra plumbing.
 
 export function ThemeProvider({ children }) {
   const { currentUser } = useAuth();
   const [globalTheme, setGlobalTheme] = useState(() => typeof window !== 'undefined' ? readStoredValue('blink-theme', 'default') : 'default');
   const [communityThemes, setCommunityThemes] = useState({});
+  const customThemes = useMemo(() => currentUser?.profile?.customThemes || {}, [currentUser?.profile?.customThemes]);
+  const themes = useMemo(() => ({ ...THEMES, ...customThemes }), [customThemes]);
 
   // Accessibility preferences. Reduced motion defaults to the OS setting the
   // first time it is seen; after that the explicit choice wins everywhere.
@@ -41,7 +45,7 @@ export function ThemeProvider({ children }) {
 
   const applyTheme = useCallback((themeId) => {
     if (themes[themeId]) setGlobalTheme(themeId);
-  }, []);
+  }, [themes]);
 
   const setReducedMotion = async (value) => {
     setReducedMotionState(Boolean(value));
@@ -56,7 +60,7 @@ export function ThemeProvider({ children }) {
   const activeThemeId = themes[globalTheme] ? globalTheme : 'default';
   const tokens = useMemo(
     () => buildThemeTokens(themes[activeThemeId], { highContrast }),
-    [activeThemeId, highContrast]
+    [themes, activeThemeId, highContrast]
   );
 
   // Tokens live on <html>, so every surface picks them up — the page
@@ -78,6 +82,30 @@ export function ThemeProvider({ children }) {
     if (themes[themeId] && currentUser?.uid) await updateUserProfile(currentUser.uid, { theme: themeId });
   };
 
+  const addCustomTheme = async spec => {
+    if (!currentUser?.uid) return null;
+    const id = `custom-${Date.now().toString(36)}`;
+    const themeSpec = {
+      label: String(spec?.label || 'Custom theme').trim().slice(0, 32) || 'Custom theme',
+      primary: spec?.primary,
+      accent: spec?.accent,
+      base: spec?.base
+    };
+    await updateUserProfile(currentUser.uid, {
+      customThemes: { ...(currentUser.profile?.customThemes || {}), [id]: themeSpec }
+    });
+    setGlobalTheme(id);
+    return id;
+  };
+
+  const removeCustomTheme = async themeId => {
+    if (!currentUser?.uid || !customThemes[themeId]) return;
+    const next = { ...customThemes };
+    delete next[themeId];
+    await updateUserProfile(currentUser.uid, { customThemes: next });
+    if (globalTheme === themeId) setGlobalTheme('default');
+  };
+
   const setCommunityTheme = async (communityId, themeId) => {
     if (!themes[themeId]) return;
     setCommunityThemes(prev => ({ ...prev, [communityId]: themeId }));
@@ -92,6 +120,8 @@ export function ThemeProvider({ children }) {
     setTheme,
     communityThemes,
     setCommunityTheme,
+    addCustomTheme,
+    removeCustomTheme,
     reducedMotion,
     setReducedMotion,
     highContrast,

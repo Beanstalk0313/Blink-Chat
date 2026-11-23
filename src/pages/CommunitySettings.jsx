@@ -7,6 +7,7 @@ import {
   createChannel,
   updateChannel,
   deleteChannel,
+  deleteCommunity,
   getCommunityMembers,
   kickUser,
   banUser,
@@ -159,8 +160,10 @@ export default function CommunitySettings() {
   const canManageCommunity = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_community');
   const canManageInvites = isOwner || hasCommunityPermission(community, currentUser?.uid, 'manage_invites');
 
-  const [modalType, setModalType] = useState(null); // 'kick', 'ban', 'deleteChannel', 'timeout'
+  const [modalType, setModalType] = useState(null); // 'kick', 'ban', 'deleteChannel', 'deleteCommunity', 'timeout'
   const [selectedTarget, setSelectedTarget] = useState(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingCommunity, setDeletingCommunity] = useState(false);
   const [banDuration, setBanDuration] = useState('-1');
 
   useEffect(() => {
@@ -360,6 +363,22 @@ export default function CommunitySettings() {
       setModalType(null);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const confirmDeleteCommunity = async () => {
+    if (!isOwner) return;
+    if (deleteConfirmText.trim().toLowerCase() !== (community.name || '').trim().toLowerCase()) return;
+    setDeletingCommunity(true);
+    setAdminError('');
+    try {
+      await deleteCommunity(communityId, currentUser.uid);
+      navigate('/communities', { replace: true });
+    } catch (error) {
+      setAdminError(error.message || 'Could not delete this community.');
+      setModalType(null);
+    } finally {
+      setDeletingCommunity(false);
     }
   };
 
@@ -788,6 +807,23 @@ export default function CommunitySettings() {
                 </button>
               </div>
             </form>
+
+            {isOwner && (
+              <section className={`${styles.card} ${styles.dangerCard}`}>
+                <h2 className={styles.cardTitle}><span className="material-symbols-outlined">delete_forever</span>Delete this community</h2>
+                <p className={styles.cardHint}>Deleting removes every channel and the community itself, and its messages become unreachable. This cannot be undone.</p>
+                <div className={styles.saveBar}>
+                  <span className={styles.saveBarHint}>Only the owner can delete {community.name}.</span>
+                  <button
+                    type="button"
+                    className={styles.dangerBtn}
+                    onClick={() => { setDeleteConfirmText(''); setModalType('deleteCommunity'); }}
+                  >
+                    Delete community
+                  </button>
+                </div>
+              </section>
+            )}
           </div>
         )}
 
@@ -1317,6 +1353,39 @@ export default function CommunitySettings() {
         <p className="text-body-md" style={{ marginBottom: '0.9rem' }}>How long should they be unable to post?</p>
         <div className={styles.timeoutGrid}>
           {TIMEOUT_OPTIONS.map(option => <button key={option.label} className={styles.timeoutOption} onClick={() => handleTimeout(selectedTarget, option.minutes)}>{option.label}</button>)}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={modalType === 'deleteCommunity'}
+        onClose={() => setModalType(null)}
+        title="Delete community"
+        footer={(
+          <>
+            <button className={styles.modalCancel} onClick={() => setModalType(null)}>Cancel</button>
+            <button
+              className={styles.modalConfirm}
+              style={{ backgroundColor: 'var(--color-error)' }}
+              disabled={deletingCommunity || deleteConfirmText.trim().toLowerCase() !== (community.name || '').trim().toLowerCase()}
+              onClick={confirmDeleteCommunity}
+            >
+              {deletingCommunity ? 'Deleting…' : 'Delete forever'}
+            </button>
+          </>
+        )}
+      >
+        <div className={styles.deleteConfirm}>
+          <p className="text-body-md">Every channel and the community itself in <strong>{community.name}</strong> will be removed, and its messages will become unreachable. This cannot be undone.</p>
+          <label className={styles.inputGroup}>
+            <span>TYPE THE COMMUNITY NAME TO CONFIRM</span>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={event => setDeleteConfirmText(event.target.value)}
+              placeholder={community.name}
+              autoFocus
+            />
+          </label>
         </div>
       </Modal>
 

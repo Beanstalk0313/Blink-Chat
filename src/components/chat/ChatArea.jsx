@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotifications } from '../../contexts/NotificationContext';
@@ -43,7 +44,7 @@ import { useMenuPresence } from '../../hooks/useMenuPresence';
 import { inviteLinkFor } from '../../services/invites';
 import { subscribeToFriends } from '../../services/friends';
 import MarkdownToolbar from '../common/MarkdownToolbar';
-import { uploadFile } from '../../services/upload';
+import AttachmentUploadModal from '../common/AttachmentUploadModal';
 import { mentionsUser, filterCommunityMessage } from '../../services/utils';
 import { renderRichText } from '../../services/richText';
 import { useCall } from '../../contexts/CallContext';
@@ -52,6 +53,7 @@ import ProfilePopover from '../common/ProfilePopover';
 import Modal from '../common/Modal';
 import Dropdown from '../common/Dropdown';
 import CommunityBannedScreen from '../common/CommunityBannedScreen';
+import { subscribeToChildControls } from '../../services/parental';
 import styles from './ChatArea.module.css';
 import { getMemberPermissions, canAccessVoiceChannel, canInviteToVoiceChannel } from '../../services/permissions';
 import AppErrorScreen from '../common/AppErrorScreen';
@@ -162,6 +164,10 @@ function ChatAreaContent() {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearchFetching, setIsSearchFetching] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  // Header popovers are portalled to <body> and positioned from their button,
+  // so no ancestor can clip them on a small screen.
+  const [notifAnchor, setNotifAnchor] = useState(null);
+  const [searchAnchor, setSearchAnchor] = useState(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [typingUsers, setTypingUsers] = useState({});
@@ -206,10 +212,11 @@ function ChatAreaContent() {
   const channelNotificationMode = notificationPreferences.channelModes?.[channelId] || 'mentions';
   const [isMuted, setIsMuted] = useState(communityMuted);
   const notificationMode = channelNotificationMode;
-  const [isUploading, setIsUploading] = useState(false);
+  const [isAttachUploadOpen, setIsAttachUploadOpen] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState(null);
   const [sendError, setSendError] = useState('');
   const [now, setNow] = useState(() => Date.now());
+  const [parentalControls, setParentalControls] = useState(null);
   const [draggedChannelId, setDraggedChannelId] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
   const dragGhostRef = useRef(null);
@@ -221,7 +228,10 @@ function ChatAreaContent() {
   const searchTimerRef = useRef(null);
   const typingTimerRef = useRef(null);
   const typingActiveRef = useRef(false);
-  const notifMenuRef = useRef(null);
+  const notifButtonRef = useRef(null);
+  const searchButtonRef = useRef(null);
+  const notifPanelRef = useRef(null);
+  const searchPanelRef = useRef(null);
   const initialLoad = useRef(true);
   const previousMessageCount = useRef(0);
   const seenMessageIds = useRef(new Set());
@@ -256,6 +266,15 @@ function ChatAreaContent() {
     leaveCommunity(currentUid, communityId).catch(() => {})
       .finally(() => navigate('/communities', { replace: true }));
   }, [kickedAt, currentUid, communityId, navigate]);
+
+  // A guardian can block a community for this account. The rules stop a blocked
+  // account from joining or creating communities; this is what keeps it out of a
+  // community it was already a member of.
+  useEffect(() => {
+    if (!currentUid) return undefined;
+    return subscribeToChildControls(currentUid, setParentalControls);
+  }, [currentUid]);
+  const guardianBlocked = Boolean(communityId) && (parentalControls?.blockedCommunities || []).includes(communityId);
 
   // Writes the read marker immediately for the newest loaded message.
   const flushChannelRead = useCallback(readThrough => {
@@ -448,14 +467,68 @@ function ChatAreaContent() {
     }
   }, [channelId, currentUser?.uid]);
 
+  // One outside tap (or Escape) closes whichever header popover is open. The
+  // panels live in a portal, so containment is checked against the panels and
+  // their toggle buttons rather than a shared wrapper.
   useEffect(() => {
-    if (!isNotifMenuOpen) return undefined;
-    const handleDocumentClick = event => {
-      if (notifMenuRef.current && !notifMenuRef.current.contains(event.target)) setIsNotifMenuOpen(false);
+    if (!isNotifMenuOpen && !isSearchOpen) return undefined;
+    const closeMenus = () => {
+      setIsNotifMenuOpen(false);
+      setIsSearchOpen(false);
     };
-    document.addEventListener('pointerdown', handleDocumentClick);
-    return () => document.removeEventListener('pointerdown', handleDocumentClick);
-  }, [isNotifMenuOpen]);
+    const handlePointerDown = event => {
+      if (notifPanelRef.current?.contains(event.target)) return;
+      if (searchPanelRef.current?.contains(event.target)) return;
+      if (notifButtonRef.current?.contains(event.target)) return;
+      if (searchButtonRef.current?.contains(event.target)) return;
+      closeMenus();
+    };
+    const handleKeyDown = event => { if (event.key === 'Escape') closeMenus(); };
+    const handleResize = () => closeMenus();
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isNotifMenuOpen, isSearchOpen]);
+
+  const closeChatMenus = () => {
+    setIsNotifMenuOpen(false);
+    setIsSearchOpen(false);
+  };
+
+  // Anchored under the button it belongs to. On phones the panels become
+  // edge-to-edge sheets, so only the vertical anchor is needed there.
+  const anchorPopover = element => {
+    const rect = element?.getBoundingClientRect();
+    if (!rect) return null;
+    return window.innerWidth <= 640
+      ? { top: Math.round(rect.bottom + 8) }
+      : { top: Math.round(rect.bottom + 8), right: Math.max(8, Math.round(window.innerWidth - rect.right)) };
+  };
+
+  const toggleNotifMenu = () => {
+    if (isNotifMenuOpen) {
+      setIsNotifMenuOpen(false);
+      return;
+    }
+    setIsSearchOpen(false);
+    setNotifAnchor(anchorPopover(notifButtonRef.current));
+    setIsNotifMenuOpen(true);
+  };
+
+  const toggleSearchPanel = () => {
+    if (isSearchOpen) {
+      setIsSearchOpen(false);
+      return;
+    }
+    setIsNotifMenuOpen(false);
+    setSearchAnchor(anchorPopover(searchButtonRef.current));
+    setIsSearchOpen(true);
+  };
 
   useEffect(() => {
     if (!channelId || !currentUser?.uid) return undefined;
@@ -772,19 +845,9 @@ function ChatAreaContent() {
     setGameModalOpen(false);
   };
 
-  const handleFileUpload = async event => {
-    const file = event.target.files?.[0];
-    if (!file || !canSend || file.size > 100 * 1024 * 1024) return;
-    setIsUploading(true);
-    try {
-      const result = await uploadFile(file);
-      setPendingAttachment({ url: result.url, name: result.name, size: result.size, type: file.type });
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsUploading(false);
-      event.target.value = '';
-    }
+  const handleAttachmentUploaded = uploaded => {
+    if (!uploaded?.url) return;
+    setPendingAttachment({ url: uploaded.url, name: uploaded.name || 'Attachment', size: uploaded.size || 0 });
   };
 
   const handleCreateChannel = async event => {
@@ -1200,6 +1263,7 @@ function ChatAreaContent() {
   }
   const banExpiration = community.bannedUsers?.[currentUser?.uid];
   if (banExpiration === -1 || banExpiration > now) return <CommunityBannedScreen expirationTime={banExpiration} />;
+  if (guardianBlocked) return <CommunityBannedScreen reason="A guardian has blocked this account from this community." />;
 
   return (
     <div className={styles.chatLayout}>
@@ -1224,30 +1288,50 @@ function ChatAreaContent() {
         <header className={styles.chatHeader}>
           <div className={styles.headerTitle}><button className={styles.menuToggle} onClick={() => setIsSidebarOpen(previous => !previous)} title="Open channels"><span className="material-symbols-outlined">menu</span></button><span className="material-symbols-outlined text-tertiary">{currentChannel?.type === 'voice' ? 'graphic_eq' : 'tag'}</span><h1>{currentChannel?.name || 'Channel'}</h1></div>
           <div className={styles.headerActions}>
-            <div className={styles.notifMenuWrap} ref={notifMenuRef}>
-              <button className={`${styles.iconBtn} ${isNotifMenuOpen || isMuted ? styles.active : ''}`} onClick={() => setIsNotifMenuOpen(previous => !previous)} title="Notification settings"><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications'}</span></button>
-              {notifMenuPresence.mounted && <div className={`${styles.notifMenu} ${notifMenuPresence.closing ? styles.menuPopoverClosing : ''}`}>
-                <p className="text-label-sm text-tertiary">NOTIFICATIONS FOR #{currentChannel?.name}</p>
-                {[{ mode: 'all', label: 'All messages' }, { mode: 'mentions', label: 'Mentions only' }, { mode: 'none', label: 'Nothing' }].map(option => (
-                  <button key={option.mode} type="button" className={`${styles.notifMenuOption} ${channelNotificationMode === option.mode ? styles.active : ''}`} onClick={() => handleNotificationModeChange(option.mode)}><span className="material-symbols-outlined">{channelNotificationMode === option.mode ? 'radio_button_checked' : 'radio_button_unchecked'}</span>{option.label}</button>
-                ))}
-                <div className={styles.notifMenuDivider} />
-                <button type="button" className={styles.notifMenuOption} onClick={handleMuteToggle}><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications_active'}</span>{isMuted ? 'Unmute entire community' : 'Mute entire community'}</button>
-              </div>}
+            <div className={styles.notifMenuWrap}>
+              <button ref={notifButtonRef} className={`${styles.iconBtn} ${isNotifMenuOpen || isMuted ? styles.active : ''}`} onClick={toggleNotifMenu} title="Notification settings" aria-expanded={isNotifMenuOpen}><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications'}</span></button>
             </div>
-            <div className={styles.searchWrap}>
-              <button className={`${styles.iconBtn} ${isSearchOpen ? styles.active : ''}`} onClick={() => setIsSearchOpen(previous => !previous)} title="Search messages"><span className="material-symbols-outlined">search</span></button>
-              {searchPresence.mounted && <div className={`${styles.searchPanel} ${searchPresence.closing ? styles.menuPopoverClosing : ''}`}>
-                <input className={styles.headerSearch} value={searchQuery} onChange={handleSearchChange} placeholder="Search messages" aria-label="Search messages" autoFocus />
-                {isSearchFetching && <div className={styles.searchHint}><span className="material-symbols-outlined">progress_activity</span>Searching more messages…</div>}
-                <div className={styles.searchResults}>
-                  {searchResults.length ? searchResults.map(result => {
-                    const resultAuthor = authorFor(result);
-                    return <button key={result.id} type="button" className={styles.searchResult} onClick={() => jumpToMessage(result.id)}><UserAvatar user={resultAuthor} size="1.6rem" /><span className={styles.searchResultBody}><span className={styles.searchResultMeta}><strong>{resultAuthor.displayName}</strong><time>{formatMessageTime(result.timestamp)}</time></span><span className={styles.searchResultSnippet}>{snippetFor(result.text, searchQuery)}</span></span></button>;
-                  }) : searchQuery.trim() ? <p className={styles.searchHint}>No matches in this channel.</p> : <p className={styles.searchHint}>Search messages in #{currentChannel?.name || 'this channel'}.</p>}
+            {notifMenuPresence.mounted && createPortal(
+              <>
+                <div className={styles.menuBackdrop} onClick={closeChatMenus} />
+                <div
+                  ref={notifPanelRef}
+                  className={`${styles.notifMenu} ${notifMenuPresence.closing ? styles.menuPopoverClosing : ''}`}
+                  style={{ top: notifAnchor?.top, right: notifAnchor?.right }}
+                >
+                  <p className="text-label-sm text-tertiary">NOTIFICATIONS FOR #{currentChannel?.name}</p>
+                  {[{ mode: 'all', label: 'All messages' }, { mode: 'mentions', label: 'Mentions only' }, { mode: 'none', label: 'Nothing' }].map(option => (
+                    <button key={option.mode} type="button" className={`${styles.notifMenuOption} ${channelNotificationMode === option.mode ? styles.active : ''}`} onClick={() => handleNotificationModeChange(option.mode)}><span className="material-symbols-outlined">{channelNotificationMode === option.mode ? 'radio_button_checked' : 'radio_button_unchecked'}</span>{option.label}</button>
+                  ))}
+                  <div className={styles.notifMenuDivider} />
+                  <button type="button" className={styles.notifMenuOption} onClick={handleMuteToggle}><span className="material-symbols-outlined">{isMuted ? 'notifications_off' : 'notifications_active'}</span>{isMuted ? 'Unmute entire community' : 'Mute entire community'}</button>
                 </div>
-              </div>}
+              </>,
+              document.body
+            )}
+            <div className={styles.searchWrap}>
+              <button ref={searchButtonRef} className={`${styles.iconBtn} ${isSearchOpen ? styles.active : ''}`} onClick={toggleSearchPanel} title="Search messages" aria-expanded={isSearchOpen}><span className="material-symbols-outlined">search</span></button>
             </div>
+            {searchPresence.mounted && createPortal(
+              <>
+                <div className={styles.menuBackdrop} onClick={closeChatMenus} />
+                <div
+                  ref={searchPanelRef}
+                  className={`${styles.searchPanel} ${searchPresence.closing ? styles.menuPopoverClosing : ''}`}
+                  style={{ top: searchAnchor?.top, right: searchAnchor?.right }}
+                >
+                  <input className={styles.headerSearch} value={searchQuery} onChange={handleSearchChange} placeholder="Search messages" aria-label="Search messages" autoFocus />
+                  {isSearchFetching && <div className={styles.searchHint}><span className="material-symbols-outlined">progress_activity</span>Searching more messages…</div>}
+                  <div className={styles.searchResults}>
+                    {searchResults.length ? searchResults.map(result => {
+                      const resultAuthor = authorFor(result);
+                      return <button key={result.id} type="button" className={styles.searchResult} onClick={() => jumpToMessage(result.id)}><UserAvatar user={resultAuthor} size="1.6rem" /><span className={styles.searchResultBody}><span className={styles.searchResultMeta}><strong>{resultAuthor.displayName}</strong><time>{formatMessageTime(result.timestamp)}</time></span><span className={styles.searchResultSnippet}>{snippetFor(result.text, searchQuery)}</span></span></button>;
+                    }) : searchQuery.trim() ? <p className={styles.searchHint}>No matches in this channel.</p> : <p className={styles.searchHint}>Search messages in #{currentChannel?.name || 'this channel'}.</p>}
+                  </div>
+                </div>
+              </>,
+              document.body
+            )}
             <button className={`${styles.iconBtn} ${isPinnedMessagesOpen ? styles.active : ''}`} onClick={() => setIsPinnedMessagesOpen(true)} title="Pinned messages"><span className="material-symbols-outlined">push_pin</span></button>
             <button className={`${styles.iconBtn} ${isMemberListOpen ? styles.active : ''}`} onClick={() => setIsMemberListOpen(previous => !previous)} title="Members"><span className="material-symbols-outlined">group</span></button>
             {canOpenSettings && <Link to={`/community-settings/${communityId}`} className={styles.iconBtn} title="Community settings"><span className="material-symbols-outlined">settings</span></Link>}
@@ -1261,12 +1345,12 @@ function ChatAreaContent() {
             <div ref={messagesEndRef} />
           </div>
           <div className={styles.inputArea}>
-            <MarkdownToolbar inputRef={messageInputRef} value={newMessage} onChange={setNewMessage} disabled={!canSend || isUploading} />
+            <MarkdownToolbar inputRef={messageInputRef} value={newMessage} onChange={setNewMessage} disabled={!canSend} />
             {sendError && <p className={styles.sendError} role="alert">{sendError}</p>}
             {typingLabel && <div className={styles.typingIndicator}><span className={styles.typingDots}><i /><i /><i /></span><span>{typingLabel}</span></div>}
             {replyingTo && <div className={styles.replyBar}><span className="material-symbols-outlined">reply</span><span className={styles.replyBarBody}><strong>Replying to {replyingTo.authorName}</strong><span>{replyingTo.text || 'Attachment'}</span></span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setReplyingTo(null)} title="Cancel reply"><span className="material-symbols-outlined">close</span></button></div>}
             {pendingAttachment && <div className={styles.pendingAttachment}><span className="material-symbols-outlined">description</span><span>{pendingAttachment.name}</span><button type="button" className={styles.removeAttachmentBtn} onClick={() => setPendingAttachment(null)} title="Remove attachment"><span className="material-symbols-outlined">close</span></button></div>}
-            <form className={styles.inputContainer} onSubmit={handleSendMessage}><div className={styles.composerActionMenu}>{isComposerMenuOpen && <div className={styles.composerFlyout}><label className={styles.composerFlyoutItem}><span className="material-symbols-outlined">{isUploading ? 'sync' : 'attach_file'}</span>Attach File<input type="file" hidden onChange={event => { setIsComposerMenuOpen(false); handleFileUpload(event); }} disabled={isUploading || !canSend} /></label><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsPollOpen(true); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); startGame(); }}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}<button type="button" className={styles.inputAction} onClick={() => setIsComposerMenuOpen(open => !open)} title="More composer actions" disabled={!canSend}><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button></div><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend || isUploading} placeholder={slowModeRemaining > 0 ? `Slow mode: ${Math.ceil(slowModeRemaining / 1000)}s left` : canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : !isCommunityMember ? 'Join this community to send messages' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => handleComposerChange(event.target.value)} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form>
+            <form className={styles.inputContainer} onSubmit={handleSendMessage}><div className={styles.composerActionMenu}>{isComposerMenuOpen && <div className={styles.composerFlyout}><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsAttachUploadOpen(true); }}><span className="material-symbols-outlined">attach_file</span>Attach File</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); setIsPollOpen(true); }}><span className="material-symbols-outlined">poll</span>Create Poll</button><button type="button" className={styles.composerFlyoutItem} onClick={() => { setIsComposerMenuOpen(false); startGame(); }}><span className="material-symbols-outlined">sports_esports</span>Play a Game</button></div>}<button type="button" className={styles.inputAction} onClick={() => setIsComposerMenuOpen(open => !open)} title="More composer actions" disabled={!canSend}><span className="material-symbols-outlined">{isComposerMenuOpen ? 'close' : 'add'}</span></button></div><div className={styles.composerField}>{hasDraftMention && <div ref={composerTextLayerRef} className={styles.composerTextLayer} aria-hidden="true">{renderMessageText(newMessage, 'draft', true)}</div>}<input ref={messageInputRef} className={`${styles.textInput} ${hasDraftMention ? styles.textInputWithMentionOverlay : ''}`} value={newMessage} disabled={!canSend} placeholder={slowModeRemaining > 0 ? `Slow mode: ${Math.ceil(slowModeRemaining / 1000)}s left` : canSend ? `Message #${currentChannel?.name || 'channel'}` : isTimedOut ? 'You are temporarily timed out' : !isCommunityMember ? 'Join this community to send messages' : 'Messages are restricted'} onScroll={event => { if (composerTextLayerRef.current) composerTextLayerRef.current.scrollLeft = event.currentTarget.scrollLeft; }} onChange={event => handleComposerChange(event.target.value)} />{mentionOptions.length > 0 && <div className={styles.mentionMenu}>{mentionOptions.map(option => <button type="button" key={option.label} onPointerDown={event => event.preventDefault()} onClick={() => insertMention(option.value)}>{option.avatar ? <UserAvatar user={option.avatar} size="1.4rem" /> : <span className="material-symbols-outlined">{option.type === 'channel' ? 'tag' : option.type === 'everyone' ? 'campaign' : 'badge'}</span>}<span className={styles.mentionOptionLabel} style={option.color ? { color: option.color } : undefined}>{option.label}</span></button>)}</div>}</div><button className={styles.inputAction} type="submit" disabled={!canSend || (!newMessage.trim() && !pendingAttachment)} title="Send message"><span className="material-symbols-outlined">send</span></button></form>
           </div>
         </>}
       </section>
@@ -1324,6 +1408,8 @@ function ChatAreaContent() {
           </div>
         )}
       </Modal>
+
+      <AttachmentUploadModal isOpen={isAttachUploadOpen} onClose={() => setIsAttachUploadOpen(false)} onUploaded={handleAttachmentUploaded} />
 
       <Modal isOpen={isPollOpen} onClose={() => setIsPollOpen(false)} title="Create poll" footer={<><button className={styles.modalCancel} onClick={() => setIsPollOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreatePoll} disabled={!pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2}>Create poll</button></>}><div className={styles.modalInputGroup}><label>QUESTION</label><input className={styles.modalInput} value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} placeholder="What do you want to know?" autoFocus /><label>OPTIONS (2–6)</label>{pollOptions.map((option, index) => <div className={styles.pollOptionRow} key={index}><input className={styles.modalInput} value={option} onChange={event => setPollOptions(previous => previous.map((value, optionIndex) => optionIndex === index ? event.target.value : value))} placeholder={`Option ${index + 1}`} />{pollOptions.length > 2 && <button type="button" className={styles.removeAttachmentBtn} onClick={() => setPollOptions(previous => previous.filter((_, optionIndex) => optionIndex !== index))} title="Remove option"><span className="material-symbols-outlined">close</span></button>}</div>)}{pollOptions.length < 6 && <button type="button" className={styles.modalCancel} onClick={() => setPollOptions(previous => [...previous, ''])}>Add option</button>}</div></Modal>
       <Modal isOpen={isCreateChannelOpen} onClose={() => setIsCreateChannelOpen(false)} title="Create channel" footer={<><button className={styles.modalCancel} onClick={() => setIsCreateChannelOpen(false)}>Cancel</button><button className={styles.modalConfirm} onClick={handleCreateChannel}>Create</button></>}><div className={styles.modalInputGroup}><label>CHANNEL NAME</label><input className={styles.modalInput} value={newChannelName} onChange={event => setNewChannelName(event.target.value)} autoFocus /><label>CHANNEL TYPE</label><Dropdown value={newChannelType} onChange={setNewChannelType} options={[{ value: 'text', label: 'Text' }, { value: 'voice', label: 'Voice' }]} /></div></Modal>

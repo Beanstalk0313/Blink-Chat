@@ -39,6 +39,39 @@ service cloud.firestore {
       );
     }
 
+    // ------------------------ parental controls ------------------------
+    // A guardian is linked through parentalLinks/{parentUid}, which can only
+    // be created with a code the child's own account generated. The child has
+    // at most one guardian, so every helper below is a single lookup.
+    function guardianChildUid() {
+      return get(/databases/$(database)/documents/parentalLinks/$(request.auth.uid)).data.childUid;
+    }
+
+    function isGuardianOfMemberOf(communityId) {
+      return isNotBanned() &&
+        exists(/databases/$(database)/documents/parentalLinks/$(request.auth.uid)) &&
+        exists(/databases/$(database)/documents/users/$(guardianChildUid())) &&
+        communityId in get(/databases/$(database)/documents/users/$(guardianChildUid())).data.get('joinedCommunities', []);
+    }
+
+    function hasParentalControls() {
+      return exists(/databases/$(database)/documents/parentalControls/$(request.auth.uid));
+    }
+
+    function parentalControlsFor(uid) {
+      return get(/databases/$(database)/documents/parentalControls/$(uid)).data;
+    }
+
+    function isCommunityBlockedForMe(communityId) {
+      return hasParentalControls() &&
+        parentalControlsFor(request.auth.uid).get('blockedCommunities', []).hasAny([communityId]);
+    }
+
+    function isCommunityCreationBlockedForMe() {
+      return hasParentalControls() &&
+        parentalControlsFor(request.auth.uid).get('blockCommunityCreation', false) == true;
+    }
+
     // Roles assigned to a member, normalised to a list: legacy documents store
     // a single role id string instead of an array.
     function memberRoleIds(community, uid) {
@@ -78,7 +111,14 @@ service cloud.firestore {
         request.resource.data.get('displayName', '').size() <= 40 &&
         request.resource.data.get('aboutMe', '').size() <= 1000 &&
         request.resource.data.get('status', '').size() <= 40 &&
-        request.resource.data.get('avatarBase64', '').size() <= 3000000;
+        request.resource.data.get('avatarBase64', '').size() <= 3000000 &&
+        // Joining a community a guardian blocked is denied here as well as in
+        // the UI, so the block cannot be bypassed by a modified client.
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['joinedCommunities']) ||
+          !hasParentalControls() ||
+          !request.resource.data.joinedCommunities.removeAll(resource.data.get('joinedCommunities', [])).hasAny(parentalControlsFor(userId).get('blockedCommunities', []))
+        );
       allow delete: if false;
 
       // Per-channel read receipts used by unread dots, "mark all as read", and
@@ -90,8 +130,11 @@ service cloud.firestore {
 
     // ============================ communities ============================
     match /communities/{communityId} {
-      allow read: if resource.data.isPrivate == false || isNotBanned();
+      // A guardian may read the child's communities (even private ones).
+      allow read: if isGuardianOfMemberOf(communityId) ||
+        resource.data.isPrivate == false || isNotBanned();
       allow create: if isNotBanned() &&
+        !isCommunityCreationBlockedForMe() &&
         request.resource.data.adminUid == request.auth.uid &&
         request.resource.data.name is string && request.resource.data.name.size() <= 60 &&
         request.resource.data.description is string && request.resource.data.description.size() <= 300 &&
@@ -121,7 +164,8 @@ service cloud.firestore {
 
     // ============================== channels ==============================
     match /channels/{channelId} {
-      allow read: if isCommunityMember(resource.data.communityId);
+      allow read: if isCommunityMember(resource.data.communityId) ||
+        isGuardianOfMemberOf(resource.data.communityId);
       allow create: if hasCommunityPermission(request.resource.data.communityId, 'manage_channels') &&
         request.resource.data.name is string && request.resource.data.name.size() <= 60 &&
         (request.resource.data.type == 'text' || request.resource.data.type == 'voice');
@@ -164,6 +208,66 @@ service cloud.firestore {
         (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined');
       allow delete: if isSignedIn() &&
         (request.auth.uid == resource.data.from || request.auth.uid == resource.data.to);
+    }
+
+    // ======================== parental controls ========================
+    // One-time pairing codes: created only by the child's own account, readable
+    // while they exist, and short-lived. Being readable is what lets a guardian
+    // claim one; a wrong guess is a random 8-character code that expires.
+    match /parentalCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isNotBanned() &&
+        request.auth.uid == request.resource.data.childUid &&
+        request.resource.data.get('childUid', '') is string &&
+        request.resource.data.get('expiresAt', 0) is int &&
+        request.resource.data.get('expiresAt', 0) > request.time.toMillis();
+      allow update: if false;
+      allow delete: if isSignedIn();
+    }
+
+    // The guardian link is keyed by the guardian's uid. Creating it requires a
+    // live code that belongs to the child being linked, and an account with no
+    // guardian yet. This is the only way to become someone's guardian.
+    match /parentalLinks/{parentUid} {
+      // The guardian's own (possibly missing) document stays readable so the
+      // Settings listener can report "no link" instead of a permission error.
+      allow read: if isSignedIn() &&
+        (parentUid == request.auth.uid || (resource != null && resource.data.childUid == request.auth.uid));
+      allow create: if isNotBanned() &&
+        parentUid == request.auth.uid &&
+        request.resource.data.parentUid == request.auth.uid &&
+        request.resource.data.childUid is string &&
+        request.resource.data.childUid != request.auth.uid &&
+        request.resource.data.code is string &&
+        exists(/databases/$(database)/documents/parentalCodes/$(request.resource.data.code)) &&
+        get(/databases/$(database)/documents/parentalCodes/$(request.resource.data.code)).data.childUid == request.resource.data.childUid &&
+        request.time.toMillis() < get(/databases/$(database)/documents/parentalCodes/$(request.resource.data.code)).data.expiresAt &&
+        !exists(/databases/$(database)/documents/parentalControls/$(request.resource.data.childUid));
+      allow update: if false;
+      // Only the guardian can end the arrangement. A blocked child cannot
+      // unlink itself to get around the blocks.
+      allow delete: if isSignedIn() && resource.data.parentUid == request.auth.uid;
+    }
+
+    // What a guardian can actually change on the child's account. The child may
+    // read it, but never write or remove it.
+    match /parentalControls/{childUid} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == childUid || resource.data.parentUid == request.auth.uid);
+      allow create: if isNotBanned() &&
+        request.resource.data.childUid == childUid &&
+        request.resource.data.parentUid == request.auth.uid &&
+        exists(/databases/$(database)/documents/parentalLinks/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/parentalLinks/$(request.auth.uid)).data.childUid == childUid &&
+        request.resource.data.get('blockedCommunities', []) is list &&
+        request.resource.data.get('blockCommunityCreation', false) is bool;
+      allow update: if isSignedIn() &&
+        resource.data.parentUid == request.auth.uid &&
+        request.resource.data.parentUid == resource.data.parentUid &&
+        request.resource.data.childUid == childUid &&
+        request.resource.data.get('blockedCommunities', []) is list &&
+        request.resource.data.get('blockCommunityCreation', false) is bool;
+      allow delete: if isSignedIn() && resource.data.parentUid == request.auth.uid;
     }
 
     // ============================= app metadata =============================
